@@ -3,7 +3,7 @@
 Importing ANY src module validates every config file (fail-fast at import).
 """
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -24,6 +24,12 @@ class PreprocessingConfig(BaseModel):
     crop_to_content: bool
     contrast_equalization: bool
     denoise: DenoiseParams
+
+
+class PdfSourcesConfig(BaseModel):
+    """configs/pdf_sources.yaml — PDFs merged into the batched source."""
+    model_config = ConfigDict(extra="forbid")
+    pdfs: List[str] = Field(min_length=1)
 
 
 class RenderingConfig(BaseModel):
@@ -76,6 +82,7 @@ class ConfigLoader:
             return data
 
         self.pipeline = PipelineConfig(**read("pipeline.yaml"))
+        self.pdf_sources = PdfSourcesConfig(**read("pdf_sources.yaml"))
         self.regions = RegionClassConfig(**read("regions.yaml"))
         self.schema = SchemaConfig(**read("schema.yaml"))
         self.models = read("models.yaml")  # raw: Group 2 owns its validation

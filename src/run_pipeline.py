@@ -1,4 +1,4 @@
-"""Group 1 pipeline entrypoint: assembly -> preprocess."""
+"""Group 1 pipeline entrypoint: merge PDFs -> assembly -> preprocess."""
 import argparse
 
 from src.utils.config_loader import config
@@ -26,8 +26,14 @@ def main() -> None:
         return
 
     if args.phase in ("assembly", "all"):
+        from src.pdf_merge.run_merge import merge_configured_pdfs
+        try:
+            merged_pdf = merge_configured_pdfs()
+        except (FileNotFoundError, ValueError) as exc:
+            log.error("pdf merge failed: %s", exc)
+            raise SystemExit(1)
         from src.assembly.run_assembly import main as run_assembly
-        if run_assembly() != 0:
+        if run_assembly(source_path=merged_pdf) != 0:
             log.error("assembly failed — aborting")
             raise SystemExit(1)
 

@@ -48,7 +48,9 @@ class SplitMap:
         return "manually_cleared" if self.confirmed else "flagged"
 
 
-def load_split_map() -> SplitMap:
+def load_split_map(source_path=None) -> SplitMap:
+    """source_path overrides the splits.yaml 'source' (e.g. merged PDF);
+    the person boundaries in splits.yaml must then describe that PDF."""
     path = config.root_dir / "configs" / "splits.yaml"
     if not path.exists():
         raise FileNotFoundError(
@@ -57,7 +59,10 @@ def load_split_map() -> SplitMap:
     data = yaml.safe_load(path.read_text())
     if not data:
         raise ValueError("configs/splits.yaml is empty — fill it in")
-    source_path = config.root_dir / data["source"]
+    if source_path is not None:
+        source_path = Path(source_path).expanduser().resolve()
+    else:
+        source_path = config.root_dir / data["source"]
     if not source_path.exists():
         raise FileNotFoundError(f"source PDF missing: {source_path}")
     source_sha = file_sha256(source_path)

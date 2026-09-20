@@ -159,6 +159,16 @@ class PmeCaseMeasurement(BaseModel):
     raw_text: str | None = None
 
 
+class RightSideTableRow(BaseModel):
+    """One row of the Page 2 side-by-side measurement table."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    row: str | None = None
+    side_r: str | None = None
+    side_l: str | None = None
+
+
 class Page2(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -167,6 +177,10 @@ class Page2(BaseModel):
     )
 
     measurements: list[PmeCaseMeasurement] = Field(
+        default_factory=list
+    )
+
+    right_side_table: list[RightSideTableRow] = Field(
         default_factory=list
     )
 

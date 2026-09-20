@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import MAIN_PROJECT_ROOT
 from .models import (
     Candidate,
     Declaration,
@@ -15,8 +16,10 @@ from .models import (
     PhysicalExamination,
     PmeCase,
     PmeVisionRow,
+    ReportImage,
     VisionExamination,
 )
+from .report_images import find_report_images
 from .schemas import PMEExtraction
 
 
@@ -26,6 +29,17 @@ def clean(value):
 
     value = str(value).strip()
     return value or None
+
+
+def to_stored_path(path: Path) -> str:
+    """Store paths relative to the pipeline project when possible
+    (matches the manifest convention, e.g. data/interim/high_res/...),
+    absolute otherwise."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(MAIN_PROJECT_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
 
 
 def parse_metrics(text):
@@ -146,8 +160,25 @@ def import_one(session: Session, data: PMEExtraction):
     session.flush()
 
     # ---------------------------------------------------------
-    # Page 2 - PME Case
+    # Report images — the four rendered pages of this document.
+    # Added in the same transaction as the examination: if any page is
+    # missing the whole import rolls back (no orphans, no partial state).
     # ---------------------------------------------------------
+    for page_number, image_path in find_report_images(
+        data.document_id
+    ):
+        session.add(
+            ReportImage(
+                examination=examination,
+                page_number=page_number,
+                image_path=to_stored_path(image_path),
+                document_id=data.document_id,
+            )
+        )
+
+    # ---------------------------------------------------------
+    # Page 2 - PME Case
+    # ------------------------------------------------=========
     pme_case = PmeCase(
         examination=examination,
         urine=clean(page2.pme_case.urine),

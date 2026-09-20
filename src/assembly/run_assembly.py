@@ -17,9 +17,11 @@ from src.utils.logger import setup_logger
 log = setup_logger("assembly")
 
 
-def main() -> int:
+def main(source_path=None) -> int:
+    """Run assembly. `source_path` overrides the splits.yaml source PDF
+    (e.g. the merged PDF from the merge step); default keeps old behavior."""
     config.bootstrap_dirs()
-    split_map = load_split_map()
+    split_map = load_split_map(source_path)
     if not split_map.confirmed:
         log.error("configs/splits.yaml has confirmed: false — assembly refuses "
                   "to run on unverified person boundaries. Inspect the PDF and "

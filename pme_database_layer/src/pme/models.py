@@ -60,6 +60,7 @@ class MedicalExamination(Timestamps, Base):
     fitness: Mapped["FitnessClassification|None"] = relationship(back_populates="examination", uselist=False, cascade="all, delete-orphan")
     declarations: Mapped[list["Declaration"]] = relationship(back_populates="examination", cascade="all, delete-orphan")
     extraction_runs: Mapped[list["ExtractionRun"]] = relationship(back_populates="examination", cascade="all, delete-orphan")
+    report_images: Mapped[list["ReportImage"]] = relationship(back_populates="examination", cascade="all, delete-orphan")
 
 class PmeCase(Base):
     __tablename__ = "pme_cases"
@@ -88,6 +89,33 @@ class PmeCase(Base):
         back_populates="pme_case",
         cascade="all, delete-orphan",
     )
+
+    vision_rows: Mapped[list["PmeVisionRow"]] = relationship(
+        back_populates="pme_case",
+        cascade="all, delete-orphan",
+    )
+
+
+class PmeVisionRow(Base):
+    """One row of the Page 2 side-by-side measurement table."""
+
+    __tablename__ = "pme_vision_rows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    pme_case_id: Mapped[int] = mapped_column(
+        ForeignKey("pme_cases.id"),
+        nullable=False,
+        index=True,
+    )
+
+    row_label: Mapped[str | None] = mapped_column(String(100))
+
+    right_value: Mapped[str | None] = mapped_column(String(100))
+
+    left_value: Mapped[str | None] = mapped_column(String(100))
+
+    pme_case: Mapped[PmeCase] = relationship(back_populates="vision_rows")
 
 
 class PmeCaseMeasurement(Base):
@@ -187,6 +215,43 @@ class Declaration(Base):
             name="uq_declaration_question",
         ),
     )
+
+class ReportImage(Base):
+    """One rendered report page, stored for visual verification of extraction.
+
+    A person report unit is exactly 4 pages; page_number is the 1-based
+    report page (1..4). Tied to the examination (the report record) rather
+    than the candidate, because a candidate may have several examinations
+    and each set of 4 pages belongs to one specific report.
+    """
+    __tablename__ = "report_images"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    examination_id: Mapped[int] = mapped_column(
+        ForeignKey("medical_examinations.id"),
+        nullable=False,
+        index=True,
+    )
+
+    page_number: Mapped[int] = mapped_column(nullable=False)
+
+    # Where the image file lives (path at import time).
+    image_path: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    # Provenance: which extraction document this render came from.
+    document_id: Mapped[str | None] = mapped_column(String(255))
+
+    examination: Mapped[MedicalExamination] = relationship(back_populates="report_images")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "examination_id",
+            "page_number",
+            name="uq_report_image_page",
+        ),
+    )
+
 
 class ExtractionRun(Base):
     __tablename__ = "extraction_runs"

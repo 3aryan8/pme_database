@@ -1,0 +1,90 @@
+"""Tests for the PDF merge step (configs/pdf_sources.yaml -> one source PDF)."""
+import hashlib
+from types import SimpleNamespace
+
+import pymupdf as fitz
+import pytest
+
+from src.pdf_merge.merge import merge_pdfs
+from src.pdf_merge.run_merge import merge_configured_pdfs, resolve_configured_pdfs
+from src.utils.config_loader import config
+
+
+def _make_pdf(path, text: str) -> None:
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 72), text)
+    doc.save(str(path))
+    doc.close()
+
+
+def _sha(path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _stub_pdfs(names: list[str]):
+    return SimpleNamespace(pdfs=list(names))
+
+
+def test_yaml_config_loads():
+    """The config loader validates configs/pdf_sources.yaml (fail-fast)."""
+    assert config.pdf_sources.pdfs
+    assert all(isinstance(name, str) and name for name in config.pdf_sources.pdfs)
+
+
+def test_resolve_multiple_pdfs_in_yaml_order(tmp_path, monkeypatch):
+    for name in ("a.pdf", "b.pdf", "c.pdf"):
+        _make_pdf(tmp_path / name, name)
+    monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["c.pdf", "a.pdf", "b.pdf"]))
+    paths = resolve_configured_pdfs(raw_dir=tmp_path)
+    assert [p.name for p in paths] == ["c.pdf", "a.pdf", "b.pdf"]
+
+
+def test_missing_pdf_produces_clear_error(tmp_path, monkeypatch):
+    _make_pdf(tmp_path / "a.pdf", "a")
+    monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["a.pdf", "ghost.pdf"]))
+    with pytest.raises(FileNotFoundError, match="ghost.pdf"):
+        resolve_configured_pdfs(raw_dir=tmp_path)
+
+
+def test_merge_preserves_yaml_order_and_output_exists(tmp_path, monkeypatch):
+    for name, text in (("a.pdf", "PAGE_A"), ("b.pdf", "PAGE_B"), ("c.pdf", "PAGE_C")):
+        _make_pdf(tmp_path / name, text)
+    monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["c.pdf", "a.pdf", "b.pdf"]))
+    out = merge_configured_pdfs(output_path=tmp_path / "merged.pdf", raw_dir=tmp_path)
+
+    assert out.is_file() and out.stat().st_size > 0
+    with fitz.open(str(out)) as merged:
+        assert merged.page_count == 3
+        texts = [merged[i].get_text().strip() for i in range(merged.page_count)]
+    assert texts == ["PAGE_C", "PAGE_A", "PAGE_B"]
+
+
+def test_original_pdfs_unchanged(tmp_path, monkeypatch):
+    for name in ("a.pdf", "b.pdf"):
+        _make_pdf(tmp_path / name, name)
+    monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["a.pdf", "b.pdf"]))
+    before = {p.name: _sha(p) for p in (tmp_path / "a.pdf", tmp_path / "b.pdf")}
+
+    out = merge_configured_pdfs(output_path=tmp_path / "merged.pdf", raw_dir=tmp_path)
+
+    assert out.is_file()
+    after = {p.name: _sha(p) for p in (tmp_path / "a.pdf", tmp_path / "b.pdf")}
+    assert before == after
+
+
+def test_single_pdf_used_directly_not_reencoded(tmp_path, monkeypatch):
+    """One configured PDF must be used as-is — re-encoding would change its
+    SHA and therefore every document_id downstream."""
+    src = tmp_path / "solo.pdf"
+    _make_pdf(src, "SOLO")
+    monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["solo.pdf"]))
+
+    out = merge_configured_pdfs(output_path=tmp_path / "merged.pdf", raw_dir=tmp_path)
+
+    assert out == src  # the original file itself, not a copy
+    assert (tmp_path / "merged.pdf").exists() is False
+
+
+def test_merge_rejects_empty_input_list(tmp_path):
+    with pytest.raises(ValueError):
+        merge_pdfs([], tmp_path / "merged.pdf")

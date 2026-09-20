@@ -13,6 +13,7 @@ from .models import (
     PhysicalExamination,
     PmeCase,
     PmeCaseMeasurement,
+    ReportImage,
     VisionExamination,
 )
 
@@ -435,6 +436,53 @@ def get_examination_by_document_id(
         return None
 
     return extraction_run.examination
+
+
+def get_report_images(
+    session: Session,
+    examination_id: int,
+) -> list[ReportImage]:
+    """
+    Fetch the four report page images for an examination,
+    in page order (1..4).
+    """
+
+    statement = (
+        select(ReportImage)
+        .where(
+            ReportImage.examination_id == examination_id
+        )
+        .order_by(
+            ReportImage.page_number
+        )
+    )
+
+    return list(
+        session.scalars(statement).all()
+    )
+
+
+def get_candidate_report_images(
+    session: Session,
+    candidate_id: int,
+) -> list[ReportImage]:
+    """
+    Fetch the report page images for a candidate's
+    latest examination (the report record).
+    """
+
+    examination = get_latest_examination_for_candidate(
+        session,
+        candidate_id,
+    )
+
+    if examination is None:
+        return []
+
+    return get_report_images(
+        session,
+        examination.id,
+    )
 
 
 def get_all_candidates(
