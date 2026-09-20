@@ -27,3 +27,90 @@ Person Report Unit (4 Pages)
 ├── Page 2 — Medical Metrics, Lab Results, & Handwritten Remarks
 ├── Page 3 — Fitness Classification, Vision Measurements, & Clinical Notes
 └── Page 4 — Candidate & Examiner Declarations / Consent
+```
+
+---
+
+## Pipeline Flow
+
+```text
+configs/pdf_sources.yaml          YAML list of PDF filenames
+        ↓
+PDF merge (src/pdf_merge)         locate + validate + merge in YAML order
+        ↓
+data/raw/merged_source.pdf        single batched source PDF
+        ↓
+Assembly (src/assembly)           split per configs/splits.yaml → render 4 pages/person
+        ↓
+Preprocessing (src/preprocessing) clean + VLM-sized copies → manifest
+        ↓
+Detection / Extraction            (VLM stages, separate entrypoints)
+        ↓
+pme_database_layer                validate → SQLite/MySQL → report generation
+```
+
+### Run the whole thing, start to finish
+
+```bash
+uv run python run_all.py              # all 5 stages (GPU needed for detect/extract)
+uv run python run_all.py --skip-gpu   # CPU stages only; validate+import run on existing extractions
+uv run python run_all.py --dry-run    # print the plan, run nothing
+```
+
+Stages: `core` (merge → assembly → preprocess) → `detect` (GPU) → `extract` (GPU) → `validate` → `import` (extractions + 4 report images into the DB). Fail-fast: stops at the first failing stage.
+
+### CPU-only core pipeline
+
+`uv run python -m src.run_pipeline` (or `--phase assembly|preprocess|all`) — merge → assembly → preprocess without the GPU/DB stages.
+
+## PDF Merging (first pipeline step)
+
+Before assembly, the pipeline merges the configured raw PDFs into one batched source PDF.
+
+1. **Where the config lives:** `configs/pdf_sources.yaml`
+   ```yaml
+   pdfs:
+     - report_001.pdf
+     - report_002.pdf
+   ```
+   Order matters — the merged PDF's page order is exactly this list's order. All listed PDFs must exist or the pipeline fails with a clear error naming the missing files.
+2. **Where input PDFs go:** `data/raw/` (filenames in the YAML resolve against this directory).
+3. **Where the merged PDF lands:** `data/raw/merged_source.pdf` (overwritten on re-run; input PDFs are never modified or deleted). A **single** configured PDF is used directly — no re-encoding, so document IDs stay stable (document IDs derive from the source file SHA).
+4. **How the pipeline uses it:** `src/run_pipeline.py` calls `merge_configured_pdfs()` and passes the result to assembly, which splits it into per-person reports. The person boundaries in `configs/splits.yaml` must describe the *merged* PDF's page layout (assembly refuses to run on unverified boundaries).
+5. **Standalone:** `uv run python -m src.pdf_merge.run_merge`
+
+## Report Images (verification)
+
+Every imported report stores its **four rendered page images** in the database so extracted values can be visually checked against the original scan.
+
+- Images live in the pipeline's standard render output: `data/interim/high_res/<document_id>/page_0000.png .. page_0003.png` (assembly output). They are **not** copied — the database stores a path reference (project-relative when possible).
+- Stored per examination (the report record) in the `report_images` table: `examination_id`, `page_number` (1-based, 1–4), `image_path`, `document_id` (provenance). Unique on `(examination_id, page_number)` — exactly one image per page per report.
+- Inserted in the **same transaction** as the candidate/examination: a missing page rolls back the whole import, so no orphan image rows and no partial records are ever left behind.
+- **Retrieving the four images for a candidate** (from `pme_database_layer`):
+  ```python
+  from pme.database import get_session, init_db
+  from pme.repository import get_candidate_report_images
+
+  init_db()
+  session = get_session()
+  for image in get_candidate_report_images(session, candidate_id):
+      print(image.page_number, image.image_path)   # 1..4, in order
+  ```
+  Or by examination: `get_report_images(session, examination_id)`.
+
+## Generic LLM Extraction Pipeline (zero-touch)
+
+A schema-driven, decoupled text → LLM → schema → DB path in `pme_database_layer`:
+the Pydantic schema class is the **single source of truth** — add/remove/rename
+fields there and the LLM prompt, validation, storage, and retrieval all adapt
+without touching extractor, store, or pipeline code (generic over *any*
+Pydantic class).
+
+```bash
+cd pme_database_layer
+uv run python scripts/run_pipeline.py --text samples/sample_report.txt   # text → LLM → validated schema → DB
+uv run python scripts/run_pipeline.py --dry-run                          # print the generated LLM prompt
+```
+
+Details, env vars (`PME_LLM_BASE_URL`, `PME_LLM_MODEL`, ...), and retrieval:
+[pme_database_layer/README.md](pme_database_layer/README.md#generic-llm-extraction-pipeline-zero-touch).

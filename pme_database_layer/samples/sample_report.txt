@@ -1,0 +1,32 @@
+SAMPLE TEXT — generic extraction pipeline demo (not a real candidate).
+Try it:  cd pme_database_layer && uv run python scripts/run_pipeline.py --text samples/sample_report.txt
+
+PERIODIC MEDICAL EXAMINATION — RRB
+----------------------------------
+Document ID       : SAMPLE-0001
+Candidate Name    : RAVI KUMAR
+Father's Name     : SURESH KUMAR
+Roll Number       : 116244151979349
+Date of Birth     : 12-08-1992
+Examination Date  : 16-06-2023
+Medical Class     : SSB
+
+LAB VALUES (page 2)
+Urine   : NORMAL
+Sugar   : ABSENT
+ALB     : ABSENT
+
+VITALS & VISION (page 3)
+Blood Pressure          : 120/80 mm
+Distance Vision, Right  : 6/6
+Distance Vision, Left   : 6/9
+
+FITNESS
+Fitness Classification  : FIT IN CLASS SSB
+Declaration Date        : 18-06-2023
+Remarks                 : No adverse remarks.
+
+MEASUREMENT TABLE (section: vision)
+  Distance vision | Right: 6/6    | Left: 6/9
+  Near vision     | Right: 60/60  | Left: 60/60
+  Glasses power   | Right: -0.50 D | Left: -1.25 D
