@@ -1,0 +1,32 @@
+# Group 1: Preprocessing Pipeline Config
+project:
+  name: "Medical Extraction Foundation"
+  version: "1.1"
+
+paths:
+  raw_dir: "data/raw"
+  high_res_dir: "data/interim/high_res"
+  high_res_clean_dir: "data/interim/high_res_clean"
+  vlm_res_dir: "data/interim/vlm_res"
+  metadata_dir: "data/metadata"
+  manifest_file: "data/metadata/manifest.parquet"
+  processed_dir: "data/processed"
+
+rendering:
+  render_dpi: 300  # CAP for adaptive rendering: page dpi = min(source effective dpi, 300). Scans are never upscaled.
+  vlm_long_edge_px: 1280  # Configurable down to 1024 if VRAM is tight
+
+preprocessing:
+  deskew: true
+  crop_to_content: true
+  contrast_equalization: true
+  denoise:
+    enabled: true
+    method: "bilateral"
+    params:
+      d: 9
+      sigma_color: 75
+      sigma_space: 75
+
+quality_checks:
+  low_source_dpi_threshold: 150

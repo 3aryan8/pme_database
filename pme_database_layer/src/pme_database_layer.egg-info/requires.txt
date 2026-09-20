@@ -1,0 +1,7 @@
+pydantic<3,>=2.7
+SQLAlchemy<3,>=2
+PyMySQL<2,>=1.1
+python-dotenv>=1.2.3
+
+[dev]
+pytest<9,>=8

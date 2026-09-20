@@ -1,0 +1,62 @@
+# Python byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments (UV / venv)
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets & Local Configs
+.env
+!.env.example
+
+# Large Data Directories (Retain structure via .gitkeep)
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/ground_truth/*
+!data/ground_truth/.gitkeep
+data/metadata/*
+!data/metadata/.gitkeep
+data/stages/*
+!data/stages/.gitkeep
+
+# Standalone Data File Exts
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.tiff
+*.csv
+*.parquet
+*.json
+*.feather
+
+# Test & Coverage Outputs
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+
+# App & Dashboard Caches
+.streamlit/secrets.toml
+.labelstudio/
+
+# Linux System & Editor Temp Files
+*~
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+docker/*.log

@@ -1,0 +1,27 @@
+# Medical Report Schema (Add your actual columns based on Phase 2 analysis)
+fields:
+  top_level:
+    - field_name: "employee_id"
+      data_type: "string"
+      source_type: "typed"
+    - field_name: "patient_name"
+      data_type: "string"
+      source_type: "typed"
+    - field_name: "exam_date"
+      data_type: "date"
+      source_type: "typed"
+    - field_name: "date_of_birth"
+      data_type: "date"
+      source_type: "typed"
+
+  table_fields:
+    - field_name: "vision_left"
+      data_type: "string"
+      source_type: "handwritten"
+      printed_row_label: "Vision (L)"
+      extraction_hint: "fraction like 6/6 or 6/9 — do not swap with the right-eye column"
+    - field_name: "blood_pressure_systolic"
+      data_type: "integer"
+      source_type: "handwritten"
+      printed_row_label: "B.P."
+      extraction_hint: "for a reading like 120/80, output only the first (upper) number"

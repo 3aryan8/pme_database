@@ -1,0 +1,22 @@
+services:
+  foundation:
+    image: medex-foundation:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ..:/app
+    working_dir: /app
+    command: ["python", "src/verify_gpu.py"]
+    shm_size: '16gb'
+
+  label-studio:
+    image: heartexlabs/label-studio:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../data/ground_truth:/label-studio/data
+      - ../data/interim/high_res:/mnt/high_res:ro

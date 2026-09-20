@@ -1,0 +1,19 @@
+# GPU override — use with: docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml
+# Only needed for Phase 5+ (VLM inference). Requires native Docker daemon with
+# NVIDIA Container Toolkit, NOT Docker Desktop (which runs in a VM without GPU).
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml run --rm foundation ...
+#
+# Or via Makefile:
+#   make gpu CMD="python -m src.detection.pose_splits"
+
+services:
+  foundation:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

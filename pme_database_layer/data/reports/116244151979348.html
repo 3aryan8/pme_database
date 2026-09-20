@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        PME Report — AJAY SINGH
+    </title>
+
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        body {
+            margin: 0;
+            padding: 0;
+
+            background: #f2f4f7;
+
+            color: #202124;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            font-size: 14px;
+
+            line-height: 1.5;
+        }
+
+
+        .container {
+            max-width: 1100px;
+
+            margin: 30px auto;
+
+            background: #ffffff;
+
+            box-shadow:
+                0 2px 12px
+                rgba(0, 0, 0, 0.08);
+        }
+
+
+        /* ================================================================
+           HEADER
+           ================================================================ */
+
+        .header {
+            padding: 30px 35px;
+
+            border-bottom:
+                2px solid #222222;
+        }
+
+
+        .header h1 {
+            margin:
+                0 0 8px 0;
+
+            font-size: 28px;
+        }
+
+
+        .subtitle {
+            color: #555555;
+
+            font-size: 15px;
+        }
+
+
+        .candidate-summary {
+            margin-top: 20px;
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap: 12px;
+        }
+
+
+        .summary-box {
+            border:
+                1px solid #dddddd;
+
+            padding:
+                12px 15px;
+
+            background:
+                #fafafa;
+        }
+
+
+        .summary-label {
+            font-size: 11px;
+
+            text-transform:
+                uppercase;
+
+            color: #666666;
+
+            margin-bottom: 3px;
+        }
+
+
+        .summary-value {
+            font-weight: 600;
+
+            font-size: 15px;
+        }
+
+
+        /* ================================================================
+           CONTENT
+           ================================================================ */
+
+        .content {
+            padding:
+                25px 35px 40px;
+        }
+
+
+        .page-section {
+            margin-bottom: 45px;
+        }
+
+
+        .section-title {
+            margin-top: 28px;
+
+            margin-bottom: 12px;
+
+            padding:
+                9px 12px;
+
+            background:
+                #eeeeee;
+
+            border-left:
+                4px solid #333333;
+
+            font-size: 16px;
+
+            font-weight: 700;
+        }
+
+
+        /* ================================================================
+           TABLES
+           ================================================================ */
+
+        .data-table {
+            width: 100%;
+
+            border-collapse:
+                collapse;
+
+            margin-bottom: 15px;
+        }
+
+
+        .data-table th,
+        .data-table td {
+            border:
+                1px solid #d5d5d5;
+
+            padding:
+                9px 11px;
+
+            text-align: left;
+
+            vertical-align:
+                top;
+        }
+
+
+        .data-table th {
+            width: 32%;
+
+            background:
+                #f7f7f7;
+
+            font-weight: 600;
+        }
+
+
+        .data-table thead th {
+            background:
+                #e9e9e9;
+
+            font-weight: 700;
+
+            width: auto;
+        }
+
+
+        .measurement-table th,
+        .measurement-table td {
+            width: auto;
+        }
+
+
+        .vision-table th:first-child {
+            width: 35%;
+        }
+
+
+        .declaration-table th,
+        .declaration-table td {
+            width: auto;
+        }
+
+
+        /* ================================================================
+           TEXT BOX
+           ================================================================ */
+
+        .text-box {
+            min-height: 45px;
+
+            border:
+                1px solid #d5d5d5;
+
+            padding: 12px;
+
+            white-space:
+                pre-wrap;
+
+            word-break:
+                break-word;
+
+            background:
+                #fafafa;
+        }
+
+
+        .empty-row {
+            text-align:
+                center !important;
+
+            color:
+                #777777;
+
+            font-style:
+                italic;
+        }
+
+
+        /* ================================================================
+           METADATA
+           ================================================================ */
+
+        .metadata {
+            margin-top: 40px;
+
+            padding-top: 20px;
+
+            border-top:
+                2px solid #dddddd;
+        }
+
+
+        /* ================================================================
+           FOOTER
+           ================================================================ */
+
+        .footer {
+            padding:
+                18px 35px;
+
+            border-top:
+                1px solid #dddddd;
+
+            color:
+                #666666;
+
+            font-size:
+                12px;
+
+            text-align:
+                center;
+        }
+
+
+        /* ================================================================
+           RESPONSIVE
+           ================================================================ */
+
+        @media (max-width: 700px) {
+
+            .container {
+                margin: 0;
+
+                box-shadow: none;
+            }
+
+
+            .header,
+            .content,
+            .footer {
+                padding-left: 15px;
+
+                padding-right: 15px;
+            }
+
+
+            .candidate-summary {
+                grid-template-columns:
+                    1fr;
+            }
+
+
+            .data-table {
+                font-size: 13px;
+            }
+
+
+            .data-table th {
+                width: 40%;
+            }
+
+        }
+
+
+        /* ================================================================
+           PRINT
+           ================================================================ */
+
+        @media print {
+
+            body {
+                background:
+                    #ffffff;
+            }
+
+
+            .container {
+                max-width: none;
+
+                margin: 0;
+
+                box-shadow: none;
+            }
+
+
+            .header {
+                padding:
+                    20px 0;
+            }
+
+
+            .content {
+                padding:
+                    10px 0;
+            }
+
+
+            .page-section {
+                break-inside:
+                    avoid;
+            }
+
+
+            .section-title {
+                break-after:
+                    avoid;
+            }
+
+
+            tr {
+                break-inside:
+                    avoid;
+            }
+
+
+            .footer {
+                padding:
+                    15px 0;
+            }
+
+
+            @page {
+                size: A4;
+
+                margin: 15mm;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+    <!-- ================================================================
+         HEADER
+         ================================================================ -->
+
+    <header class="header">
+
+        <h1>
+            Periodical Medical Examination Report
+        </h1>
+
+        <div class="subtitle">
+            Digital PME Record
+        </div>
+
+
+        <div class="candidate-summary">
+
+
+            <div class="summary-box">
+
+                <div class="summary-label">
+                    Candidate
+                </div>
+
+                <div class="summary-value">
+                    AJAY SINGH
+                </div>
+
+            </div>
+
+
+            <div class="summary-box">
+
+                <div class="summary-label">
+                    Roll Number
+                </div>
+
+                <div class="summary-value">
+                    116244151979348
+                </div>
+
+            </div>
+
+
+            <div class="summary-box">
+
+                <div class="summary-label">
+                    Medical Examination
+                </div>
+
+                <div class="summary-value">
+                    23-07-2026
+                </div>
+
+            </div>
+
+
+        </div>
+
+    </header>
+
+
+    <!-- ================================================================
+         REPORT CONTENT
+         ================================================================ -->
+
+    <main class="content">
+
+        
+    <section class="page-section">
+
+        
+        <div class="section-title">
+            Page 1 — Candidate / General Details
+        </div>
+    
+
+        <table class="data-table">
+            <tbody>
+
+                
+        <tr>
+            <th>Candidate Name</th>
+            <td>AJAY SINGH</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Father Name</th>
+            <td>AMOL SINGH</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Date of Birth</th>
+            <td>05-09-2002</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Age at Medical Examination</th>
+            <td>23</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Mobile Number</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Email ID</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Roll Number</th>
+            <td>116244151979348</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Recruitment CEN</th>
+            <td>06/2024</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Class</th>
+            <td>A3 &amp; below and below</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Document Verification Date</th>
+            <td>22-07-2026</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Medical Examination Date</th>
+            <td>23-07-2026</td>
+        </tr>
+    
+
+            </tbody>
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 1 — Physical Identification
+        </div>
+    
+
+        <table class="data-table">
+            <tbody>
+
+                
+        <tr>
+            <th>Permanent Physical Identification Marks</th>
+            <td>MOLE ON LEFT SIDE OF CHEEK; MOLE ON RIGHT SIDE OF NECK</td>
+        </tr>
+    
+
+            </tbody>
+        </table>
+
+    </section>
+    
+
+        
+    <section class="page-section">
+
+        
+        <div class="section-title">
+            Page 2 — PME CASE
+        </div>
+    
+
+        <table class="data-table">
+            <tbody>
+
+                
+        <tr>
+            <th>Urine</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Sugar</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>ALB</th>
+            <td>N</td>
+        </tr>
+    
+
+            </tbody>
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 2 — Additional Measurements / Table Data
+        </div>
+    
+
+        <table class="data-table measurement-table">
+
+            <thead>
+                <tr>
+                    <th>Row / Label</th>
+                    <th>Column 1</th>
+                    <th>Column 2</th>
+                    <th>Raw Text</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                
+            <tr>
+                <td colspan="4" class="empty-row">
+                    No additional measurements recorded
+                </td>
+            </tr>
+        
+            </tbody>
+
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 2 — MMR / F.S. Chest X-Ray
+        </div>
+    
+
+        <table class="data-table">
+            <tbody>
+
+                
+        <tr>
+            <th>Chest X-Ray Result</th>
+            <td>—</td>
+        </tr>
+    
+
+            </tbody>
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 2 — Advice
+        </div>
+    
+
+        <div class="text-box">
+            —
+        </div>
+
+
+        
+        <div class="section-title">
+            Page 2 — Handwritten Remarks
+        </div>
+    
+
+        <div class="text-box">
+            COCCON; NO LASIK; SCAR; LENS CLEAN; PMR
+        </div>
+
+    </section>
+    
+
+        
+    <section class="page-section">
+
+
+        
+        <div class="section-title">
+            Page 3 — Fitness Classification
+        </div>
+    
+
+        <table class="data-table">
+            <tbody>
+
+                
+        <tr>
+            <th>Fit in Class</th>
+            <td>A3 &amp; below and below</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Unfit in Class</th>
+            <td>—</td>
+        </tr>
+    
+
+            </tbody>
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 3 — Acuity of Vision
+        </div>
+    
+
+        
+    <table class="data-table vision-table">
+
+        <thead>
+            <tr>
+                <th>Vision Parameter</th>
+                <th>Right Eye</th>
+                <th>Left Eye</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            <tr>
+                <th>Distance - Uncorrected</th>
+                <td>6/9</td>
+                <td>6/9</td>
+            </tr>
+
+            <tr>
+                <th>Distance - Corrected</th>
+                <td>6/9</td>
+                <td>6/9</td>
+            </tr>
+
+            <tr>
+                <th>Near - Uncorrected</th>
+                <td>N6</td>
+                <td>N6</td>
+            </tr>
+
+            <tr>
+                <th>Near - Corrected</th>
+                <td>-</td>
+                <td>-</td>
+            </tr>
+
+            <tr>
+                <th>Glasses Power - S</th>
+                <td>-0.75</td>
+                <td>-0.75</td>
+            </tr>
+
+            <tr>
+                <th>Glasses Power - C</th>
+                <td>-0.75</td>
+                <td>-0.75</td>
+            </tr>
+
+            <tr>
+                <th>Glasses Power - A</th>
+                <td>—</td>
+                <td>—</td>
+            </tr>
+
+        </tbody>
+    </table>
+    
+
+
+        
+        <div class="section-title">
+            Page 3 — Vision Parameters
+        </div>
+    
+
+        <table class="data-table">
+
+            <tbody>
+
+                
+        <tr>
+            <th>Color Perception</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Binocular Vision</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Night Vision</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Field of Vision</th>
+            <td>—</td>
+        </tr>
+    
+
+            </tbody>
+
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 3 — Physical Examination
+        </div>
+    
+
+        <table class="data-table">
+
+            <tbody>
+
+                
+        <tr>
+            <th>Urine</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Hearing</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>General Physical Examination</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>PR</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>BP</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>CVS</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>RS</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>PIA</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Spine</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Heart</th>
+            <td>N</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Lungs</th>
+            <td>N</td>
+        </tr>
+    
+
+            </tbody>
+
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 3 — Medical Examiner
+        </div>
+    
+
+        <table class="data-table">
+
+            <tbody>
+
+                
+        <tr>
+            <th>Doctor Name</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Doctor Role / Designation</th>
+            <td>—</td>
+        </tr>
+    
+
+            </tbody>
+
+        </table>
+
+    </section>
+    
+
+        
+    <section class="page-section">
+
+        
+        <div class="section-title">
+            Page 4 — Part I — Candidate Declaration
+        </div>
+    
+
+        <table class="data-table declaration-table">
+
+            <thead>
+                <tr>
+                    <th>Question No.</th>
+                    <th>Answer</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                
+            <tr>
+
+                <td>
+                    1a
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    1b
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    2
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    3
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    4
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            </tbody>
+
+        </table>
+
+
+        
+        <div class="section-title">
+            Page 4 — Part II — Candidate Declaration
+        </div>
+    
+
+        <table class="data-table declaration-table">
+
+            <thead>
+                <tr>
+                    <th>Question No.</th>
+                    <th>Answer</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                
+            <tr>
+
+                <td>
+                    1
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    2
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    3
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    4
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    5
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            <tr>
+
+                <td>
+                    6
+                </td>
+
+                <td>
+                    No
+                </td>
+
+            </tr>
+        
+            </tbody>
+
+        </table>
+    
+
+        
+        <div class="section-title">
+            Page 4 — Declaration / Medical Examiner Details
+        </div>
+    
+
+        <table class="data-table">
+
+            <tbody>
+
+                
+        <tr>
+            <th>Declaration Date</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Doctor Name</th>
+            <td>—</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Doctor Role / Designation</th>
+            <td>—</td>
+        </tr>
+    
+
+            </tbody>
+
+        </table>
+
+    </section>
+    
+
+        
+    <section class="metadata">
+
+        
+        <div class="section-title">
+            Extraction Metadata
+        </div>
+    
+
+        <table class="data-table">
+
+            <tbody>
+
+                
+        <tr>
+            <th>Document ID</th>
+            <td>231c1d5189f1bcd717ab880cca4d0682799911a892bb1974b230982c00721ce7</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Extraction Model</th>
+            <td>Qwen/Qwen2.5-VL-7B-Instruct</td>
+        </tr>
+    
+
+                
+        <tr>
+            <th>Extracted At</th>
+            <td>2026-09-12 13:08:20.181726</td>
+        </tr>
+    
+
+            </tbody>
+
+        </table>
+
+    </section>
+    
+
+    </main>
+
+
+    <!-- ================================================================
+         FOOTER
+         ================================================================ -->
+
+    <footer class="footer">
+
+        Digital PME Data Record
+
+    </footer>
+
+
+</div>
+
+
+</body>
+
+</html>

@@ -1,0 +1,12 @@
+# Region Classes
+extraction_classes:
+  - typed_text
+  - handwritten_text
+  - data_table_typed
+  - data_table_handwritten
+
+discard_classes:
+  - photo
+  - thumbprint
+  - signature
+  - stamp_seal

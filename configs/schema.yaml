@@ -1,0 +1,296 @@
+# =============================================================================
+# Medical Report Extraction Schema — v2 (hierarchical, page-structured)
+# 2026-09-08 · derived by visual analysis of the 4-page RRB medical report
+# (Railway Recruitment Board: medical memo -> clinical notes -> fitness
+#  certificate -> candidate declaration).
+#
+# DESIGN RULES
+#   * The tree mirrors the physical document: one top-level section per page.
+#   * `page` (1-based, document-relative) tells the runner which page a section
+#     belongs to — each page's prompt asks only for its own fields.
+#   * Leaves (string/integer/float/date/boolean) are the only scored units.
+#     Containers (object/array) carry structure, labels and extraction hints.
+#   * `object` = a printed box or nested table region.
+#   * `array`  = a row-wise printed table (one item object per row).
+#   * `printed_row_label` anchors a field to the text printed on the form.
+#   * `extraction_hint` is the highest-leverage tuning knob for the VLM.
+#   * `template_rows` pre-fills array scaffolding for hand-typed ground truth.
+#
+# The v1 flat baseline (6 fields) is preserved at schema.baseline.yaml.
+# =============================================================================
+
+fields:
+  # ===========================================================================
+  # PAGE 1 — Basic Info & Identification (Medical Memo, typed form)
+  # ===========================================================================
+  - field_name: page_1_basic_info
+    data_type: object
+    page: 1
+    extraction_hint: "Medical Memo / RRB header page (typed). All values are printed; transcribe exactly."
+    children:
+      - field_name: general_details
+        data_type: object
+        extraction_hint: "Identity block under the candidate name header."
+        children:
+          - field_name: candidate_name
+            data_type: string
+            source_type: typed
+            printed_row_label: "Candidate Name"
+            extraction_hint: "Full name exactly as printed (usually uppercase)."
+          - field_name: father_name
+            data_type: string
+            source_type: typed
+            printed_row_label: "Father Name"
+            extraction_hint: "Father's name exactly as printed."
+          - field_name: date_of_birth
+            data_type: date
+            source_type: typed
+            printed_row_label: "Date of Birth"
+            extraction_hint: "dd-mm-yyyy as printed; do NOT reformat."
+          - field_name: dv_date
+            data_type: date
+            source_type: typed
+            printed_row_label: "DV Date"
+            extraction_hint: "Document-Verification date (top right); this is NOT the medical exam date."
+          - field_name: medical_examination_date
+            data_type: date
+            source_type: typed
+            printed_row_label: "Med Exam Dt"
+            extraction_hint: "The medical examination date, near the candidate name."
+
+      - field_name: narrative_details
+        data_type: object
+        extraction_hint: "Details embedded in the memo paragraph and barcode label."
+        children:
+          - field_name: roll_number
+            data_type: string
+            source_type: typed
+            printed_row_label: "Roll No"
+            extraction_hint: "The roll number from the paragraph or the barcode label; digits only, no spaces."
+          - field_name: recruitment_cen
+            data_type: string
+            source_type: typed
+            printed_row_label: "CEN"
+            extraction_hint: "CEN number, e.g. 02/2024; keep the slash."
+          - field_name: class
+            data_type: string
+            source_type: typed
+            printed_row_label: "Class"
+            extraction_hint: "Eligibility class, e.g. 'A3 and below'; transcribe exactly."
+
+      - field_name: physical_traits
+        data_type: object
+        extraction_hint: "Permanent physical marks of identification (numbered list)."
+        children:
+          - field_name: permanent_physical_identification_marks
+            data_type: string
+            source_type: typed
+            printed_row_label: "Permanent Physical marks of identification"
+            extraction_hint: "List every numbered mark; join with '; ', e.g. 'MOLE ON RIGHT EAR; MOLE ON LEFT HAND FOREARM'. Null if none."
+
+  # ===========================================================================
+  # PAGE 2 — Medical Metrics & Remarks (M.M.E. CASE box, hand-drawn table, notes)
+  # ===========================================================================
+  - field_name: page_2_medical_metrics
+    data_type: object
+    page: 2
+    extraction_hint: "Declaration page carrying the M.M.E. CASE box, a small hand-drawn R/L table, and freehand clinical remarks."
+    children:
+      - field_name: pme_case
+        data_type: object
+        printed_row_label: "P.M.E. CASE"
+        extraction_hint: "The printed box with URINE / SUGAR / ALB rows. Transcribe each cell exactly; null if the cell is blank."
+        children:
+          - field_name: urine
+            data_type: string
+            source_type: handwritten
+            printed_row_label: "URINE"
+            extraction_hint: "Value written on the URINE row of the P.M.E. CASE box; null if blank."
+          - field_name: sugar
+            data_type: string
+            source_type: handwritten
+            printed_row_label: "SUGAR"
+            extraction_hint: "Value written on the SUGAR row; transcribe the literal characters, null if unreadable."
+          - field_name: alb
+            data_type: string
+            source_type: handwritten
+            printed_row_label: "ALB"
+            extraction_hint: "Albumin, written on the ALB row; often scribbled shorthand — transcribe literally, null if unreadable."
+
+      - field_name: right_side_table
+        data_type: array
+        source_type: handwritten
+        extraction_hint: "Hand-drawn table on the right side: rows K1 and K2, columns R and L. Output one row object per table row, top to bottom."
+        template_rows:
+          - row: "K1"
+          - row: "K2"
+        item:
+          field_name: measurement_row
+          data_type: object
+          children:
+            - field_name: row
+              data_type: string
+              source_type: handwritten
+              extraction_hint: "Row label as written, e.g. K1."
+            - field_name: side_r
+              data_type: float
+              source_type: handwritten
+              extraction_hint: "Numeric value under column R; null if unreadable."
+            - field_name: side_l
+              data_type: float
+              source_type: handwritten
+              extraction_hint: "Numeric value under column L; null if unreadable."
+
+      - field_name: handwritten_remarks
+        data_type: string
+        source_type: handwritten
+        extraction_hint: "All other legible freehand remarks on this page (eye findings, 'No lasic scar', chest X-ray verdict and report numbers, etc.). Verbatim, separated by '; '; null if none legible."
+
+  # ===========================================================================
+  # PAGE 3 — Fitness Classification & Vision (CERTIFICATE - PHYSICAL FITNESS)
+  # ===========================================================================
+  - field_name: page_3_fitness_classification
+    data_type: object
+    page: 3
+    extraction_hint: "CERTIFICATE - PHYSICAL FITNESS OF CANDIDATE. Contains the fit/unfit lines, the vision table, and a freehand examination block."
+    children:
+      - field_name: fit_in_class
+        data_type: string
+        source_type: handwritten
+        printed_row_label: "FIT in class"
+        extraction_hint: "Handwritten entry after 'FIT in class'; null if that line is blank."
+      - field_name: unfit_in_class
+        data_type: string
+        source_type: handwritten
+        printed_row_label: "UNFIT in class"
+        extraction_hint: "Handwritten entry after 'UNFIT in class'; null if that line is blank."
+
+      - field_name: accuracy_of_vision
+        data_type: object
+        printed_row_label: "Acuity of Vision"
+        extraction_hint: "The printed vision table: rows R.E. / L.E.; columns Distance (Uncorrected/Corrected), Near (Uncorrected/Corrected), Power of glasses (S/C/A). Transcribe each cell exactly; null for empty cells."
+        children:
+          - field_name: right_eye
+            data_type: object
+            printed_row_label: "R.E."
+            children:
+              - field_name: distance_uncorrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "R.E. row, Distance > Uncorrected cell (e.g. 6/9); null if blank."
+              - field_name: distance_corrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "R.E. row, Distance > Corrected cell; null if blank."
+              - field_name: near_uncorrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "R.E. row, Near > Uncorrected cell (e.g. N6); null if blank."
+              - field_name: near_corrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "R.E. row, Near > Corrected cell; null if blank."
+              - field_name: glasses_power_s
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "R.E. row, Power of glasses > S; null if blank."
+              - field_name: glasses_power_c
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "R.E. row, Power of glasses > C; null if blank."
+              - field_name: glasses_power_a
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "R.E. row, Power of glasses > A; null if blank."
+          - field_name: left_eye
+            data_type: object
+            printed_row_label: "L.E."
+            children:
+              - field_name: distance_uncorrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "L.E. row, Distance > Uncorrected cell; null if blank."
+              - field_name: distance_corrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "L.E. row, Distance > Corrected cell; null if blank."
+              - field_name: near_uncorrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "L.E. row, Near > Uncorrected cell; null if blank."
+              - field_name: near_corrected
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "L.E. row, Near > Corrected cell; null if blank."
+              - field_name: glasses_power_s
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "L.E. row, Power of glasses > S; null if blank."
+              - field_name: glasses_power_c
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "L.E. row, Power of glasses > C; null if blank."
+              - field_name: glasses_power_a
+                data_type: string
+                source_type: handwritten
+                extraction_hint: "L.E. row, Power of glasses > A; null if blank."
+
+      - field_name: handwritten_text_below_vision_table
+        data_type: string
+        source_type: handwritten
+        extraction_hint: "The freehand examination block below the vision table (colour perception, night vision, urine, hearing, PR, BP, heart, lungs, etc.). Verbatim, lines joined with '; '; null if none legible."
+
+  # ===========================================================================
+  # PAGE 4 — Sectional Tables (Declaration: Part-I and Part-II)
+  # ===========================================================================
+  - field_name: page_4_declarations
+    data_type: object
+    page: 4
+    extraction_hint: "Declaration by the candidate: a Particulars table plus PART-I and PART-II question tables. Each question row has a printed number and a handwritten answer."
+    children:
+      - field_name: part_one
+        data_type: array
+        printed_row_label: "PART-I"
+        extraction_hint: "One row object per printed question row under PART-I, in printed order (1a, 1b, 2, 3, 4). answer: true='Yes', false='No', null=unreadable."
+        template_rows:
+          - question_no: "1a"
+          - question_no: "1b"
+          - question_no: "2"
+          - question_no: "3"
+          - question_no: "4"
+        item:
+          field_name: declaration_row
+          data_type: object
+          children:
+            - field_name: question_no
+              data_type: string
+              source_type: typed
+              extraction_hint: "Row number as printed, e.g. 1a, 1b, 2, 3, 4."
+            - field_name: answer
+              data_type: boolean
+              source_type: handwritten
+              extraction_hint: "The handwritten answer for this row: true if 'Yes', false if 'No', null if unreadable."
+
+      - field_name: part_two
+        data_type: array
+        printed_row_label: "PART-II"
+        extraction_hint: "One row object per printed question row under PART-II, in printed order (rows 1-6). answer: true='Yes', false='No', null=unreadable."
+        template_rows:
+          - question_no: "1"
+          - question_no: "2"
+          - question_no: "3"
+          - question_no: "4"
+          - question_no: "5"
+          - question_no: "6"
+        item:
+          field_name: declaration_row
+          data_type: object
+          children:
+            - field_name: question_no
+              data_type: string
+              source_type: typed
+              extraction_hint: "Row number as printed, e.g. 1, 2, 3, 4, 5, 6."
+            - field_name: answer
+              data_type: boolean
+              source_type: handwritten
+              extraction_hint: "The handwritten answer for this row: true if 'Yes', false if 'No', null if unreadable."
