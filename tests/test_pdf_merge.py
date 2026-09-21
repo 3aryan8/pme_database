@@ -72,17 +72,38 @@ def test_original_pdfs_unchanged(tmp_path, monkeypatch):
     assert before == after
 
 
-def test_single_pdf_used_directly_not_reencoded(tmp_path, monkeypatch):
-    """One configured PDF must be used as-is — re-encoding would change its
-    SHA and therefore every document_id downstream."""
+def test_single_pdf_copied_into_merged_dir_sha_stable(tmp_path, monkeypatch):
+    """One configured PDF is copied byte-for-byte into the merged folder —
+    the pipeline always consumes data/merged/merged_source.pdf, and the
+    copy keeps the file SHA (hence every document_id) stable: no
+    re-encoding."""
     src = tmp_path / "solo.pdf"
     _make_pdf(src, "SOLO")
     monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["solo.pdf"]))
+    merged_dir = tmp_path / "merged_out"
+    before = _sha(src)
 
-    out = merge_configured_pdfs(output_path=tmp_path / "merged.pdf", raw_dir=tmp_path)
+    out = merge_configured_pdfs(raw_dir=tmp_path, merged_dir=merged_dir)
 
-    assert out == src  # the original file itself, not a copy
-    assert (tmp_path / "merged.pdf").exists() is False
+    assert out == merged_dir / "merged_source.pdf"
+    assert out.is_file()
+    assert _sha(out) == before          # byte-identical -> document_ids stable
+    assert _sha(src) == before          # original untouched
+
+
+def test_single_pdf_copy_is_idempotent(tmp_path, monkeypatch):
+    """Re-running the merge with unchanged input does not rewrite the file."""
+    src = tmp_path / "solo.pdf"
+    _make_pdf(src, "SOLO")
+    monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["solo.pdf"]))
+    merged_dir = tmp_path / "merged_out"
+
+    first = merge_configured_pdfs(raw_dir=tmp_path, merged_dir=merged_dir)
+    mtime = first.stat().st_mtime_ns
+    second = merge_configured_pdfs(raw_dir=tmp_path, merged_dir=merged_dir)
+
+    assert second == first
+    assert first.stat().st_mtime_ns == mtime   # rewrite skipped
 
 
 def test_merge_rejects_empty_input_list(tmp_path):

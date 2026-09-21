@@ -7,8 +7,10 @@ assembly stage then splits. Originals are never modified or deleted.
 
 Usage: uv run python -m src.pdf_merge.run_merge
 """
+import shutil
 from pathlib import Path
 
+from src.assembly.id_generator import file_sha256
 from src.pdf_merge.merge import merge_pdfs
 from src.utils.config_loader import config
 from src.utils.logger import setup_logger
@@ -44,25 +46,34 @@ def merge_configured_pdfs(
     raw_dir: Path | None = None,
     merged_dir: Path | None = None,
 ) -> Path:
-    """Merge all configured PDFs, in YAML order, into one source PDF.
+    """Materialize the pipeline's single source PDF in data/merged/.
 
-    Default output: data/merged/merged_source.pdf — a SEPARATE folder from
-    the raw inputs, so the merged file can never be picked up as an input
-    on a later run (no recursive re-merging). Returns the merged path.
+    The merged file is the ONLY input the rest of the pipeline consumes —
+    data/raw is never read downstream. One configured PDF is copied
+    byte-for-byte (SHA preserved, so document_ids stay stable — no
+    re-encoding); several are merged in YAML order. The output lives in a
+    SEPARATE folder from the raw inputs, so it can never be picked up as an
+    input on a later run (no recursive re-merging). Originals are never
+    modified or deleted. Returns the merged path.
     """
     raw_dir = raw_dir or config.get_path("raw_dir")
     inputs = resolve_configured_pdfs(raw_dir)
-    if len(inputs) == 1:
-        # Single PDF: use it directly. Re-encoding would change the file
-        # SHA and therefore every document_id (sha256(source_sha : person)).
-        log.info("single PDF configured — using it directly: %s", inputs[0])
-        return inputs[0]
     if output_path is None:
         output_path = (merged_dir or config.get_path("merged_dir")) / MERGED_FILENAME
     if output_path.resolve() in [p.resolve() for p in inputs]:
         raise ValueError(
             f"merged output collides with one of its input PDFs: {output_path}"
         )
+    if len(inputs) == 1:
+        src = inputs[0]
+        # Idempotent: skip the copy when the destination is already
+        # byte-identical (keeps mtime, avoids pointless rewrites).
+        if not (output_path.is_file()
+                and file_sha256(output_path) == file_sha256(src)):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, output_path)
+        log.info("single PDF configured — merged source ready: %s", output_path)
+        return output_path
     merged = merge_pdfs(inputs, output_path)
     log.info("merged %d PDFs -> %s", len(inputs), merged)
     return merged
