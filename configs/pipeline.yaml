@@ -5,6 +5,7 @@ project:
 
 paths:
   raw_dir: "data/raw"
+  merged_dir: "data/merged"  # merged source PDF lives here, NOT in data/raw — so it can never be re-merged as an input
   high_res_dir: "data/interim/high_res"
   high_res_clean_dir: "data/interim/high_res_clean"
   vlm_res_dir: "data/interim/vlm_res"

@@ -10,7 +10,7 @@ Stages (each in its own `uv run` subprocess, fail-fast on first error):
   2. detect    VLM region detection                      (GPU)
   3. extract   VLM field extraction                      (GPU)
   4. validate  validate extraction JSONs                 (pme_database_layer)
-  5. import    import extractions + 4 report images -> DB (pme_database_layer)
+  5. import    import extractions + report images -> DB (pme_database_layer)
 
 After a successful run, retrieve a candidate's four report images with
 (pme_database_layer):

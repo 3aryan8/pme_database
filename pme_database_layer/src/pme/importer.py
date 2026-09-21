@@ -160,12 +160,15 @@ def import_one(session: Session, data: PMEExtraction):
     session.flush()
 
     # ---------------------------------------------------------
-    # Report images — the four rendered pages of this document.
+    # Report images — every rendered page of this document. N pages per
+    # person comes from configs/splits.yaml (via the record's
+    # pages_covered), not a fixed number.
     # Added in the same transaction as the examination: if any page is
     # missing the whole import rolls back (no orphans, no partial state).
     # ---------------------------------------------------------
+    expected_pages = len(data.pages_covered) or None
     for page_number, image_path in find_report_images(
-        data.document_id
+        data.document_id, expected=expected_pages
     ):
         session.add(
             ReportImage(

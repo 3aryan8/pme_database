@@ -219,10 +219,11 @@ class Declaration(Base):
 class ReportImage(Base):
     """One rendered report page, stored for visual verification of extraction.
 
-    A person report unit is exactly 4 pages; page_number is the 1-based
-    report page (1..4). Tied to the examination (the report record) rather
-    than the candidate, because a candidate may have several examinations
-    and each set of 4 pages belongs to one specific report.
+    One row per rendered page; a person report has as many pages as
+    configs/splits.yaml assigns (N — historically 4). page_number is the
+    1-based report page (1..N). Tied to the examination (the report record)
+    rather than the candidate, because a candidate may have several
+    examinations and each rendered set belongs to one specific report.
     """
     __tablename__ = "report_images"
 

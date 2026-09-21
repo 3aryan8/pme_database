@@ -24,7 +24,11 @@ DOC_A = "doc_alpha"
 DOC_B = "doc_beta"
 
 
-def _extraction(document_id: str, roll_number: str) -> PMEExtraction:
+def _extraction(
+    document_id: str,
+    roll_number: str,
+    pages: list[int] | None = None,
+) -> PMEExtraction:
     return PMEExtraction(
         document_id=document_id,
         fields={
@@ -35,6 +39,9 @@ def _extraction(document_id: str, roll_number: str) -> PMEExtraction:
                 "narrative_details": {"roll_number": roll_number},
             },
         },
+        # declared coverage drives the expected page count (default 4,
+        # as in configs/splits.yaml for the current dataset)
+        pages_covered=[0, 1, 2, 3] if pages is None else pages,
     )
 
 
@@ -143,14 +150,32 @@ def test_page_numbers_preserved(session, monkeypatch, tmp_path):
 
 def test_missing_page_fails_atomically_no_orphans(session, monkeypatch, tmp_path):
     monkeypatch.setenv("REPORT_IMAGES_DIR", str(tmp_path))
-    _make_pages(tmp_path, DOC_A, count=3)  # only 3 of 4 pages
+    _make_pages(tmp_path, DOC_A, count=3)  # only 3 of the declared 4 pages
 
-    with pytest.raises(FileNotFoundError, match="page 4"):
+    with pytest.raises(FileNotFoundError, match="expected 4"):
         with session.begin_nested():
             import_one(session, _extraction(DOC_A, "5555555555"))
     session.rollback()
 
     assert _counts(session) == (0, 0, 0)
+
+
+def test_candidate_inserted_with_six_pages(session, monkeypatch, tmp_path):
+    """Pages per person come from splits.yaml (via pages_covered), not a
+    hard-coded 4: a 6-page person imports all six."""
+    monkeypatch.setenv("REPORT_IMAGES_DIR", str(tmp_path))
+    _make_pages(tmp_path, DOC_A, count=6)
+    with session.begin_nested():
+        examination, created = import_one(
+            session,
+            _extraction(DOC_A, "7777777777", pages=[0, 1, 2, 3, 4, 5]),
+        )
+    session.commit()
+
+    assert created is True
+    assert _counts(session) == (1, 1, 6)
+    images = get_report_images(session, examination.id)
+    assert [i.page_number for i in images] == [1, 2, 3, 4, 5, 6]
 
 
 def test_duplicate_import_no_duplicate_images(session, monkeypatch, tmp_path):
@@ -180,12 +205,22 @@ def test_to_stored_path_relative_inside_project_absolute_outside():
     assert to_stored_path(outside).startswith("/")
 
 
-def test_find_report_images_strict(tmp_path):
+def test_find_report_images_count_and_mismatch(tmp_path):
     _make_pages(tmp_path, DOC_A, count=4)
-    pairs = find_report_images(DOC_A, base_dir=tmp_path)
+    pairs = find_report_images(DOC_A, base_dir=tmp_path, expected=4)
     assert [n for n, _ in pairs] == [1, 2, 3, 4]
     assert all(p.is_file() for _, p in pairs)
 
+    # N is not hard-coded: a 6-page person (per splits.yaml) works as-is
+    _make_pages(tmp_path, "doc_six_pages", count=6)
+    pairs = find_report_images("doc_six_pages", base_dir=tmp_path, expected=6)
+    assert [n for n, _ in pairs] == [1, 2, 3, 4, 5, 6]
+
+    # declared vs rendered mismatch fails the import (atomic rollback)
     _make_pages(tmp_path, DOC_B, count=2)
-    with pytest.raises(FileNotFoundError, match="page 3"):
-        find_report_images(DOC_B, base_dir=tmp_path)
+    with pytest.raises(FileNotFoundError, match="expected 4"):
+        find_report_images(DOC_B, base_dir=tmp_path, expected=4)
+
+    # no rendered pages at all fails
+    with pytest.raises(FileNotFoundError, match="no rendered"):
+        find_report_images("doc_missing", base_dir=tmp_path, expected=4)

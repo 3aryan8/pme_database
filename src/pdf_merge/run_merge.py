@@ -40,11 +40,15 @@ def resolve_configured_pdfs(raw_dir: Path | None = None) -> list[Path]:
 
 
 def merge_configured_pdfs(
-    output_path: Path | None = None, raw_dir: Path | None = None
+    output_path: Path | None = None,
+    raw_dir: Path | None = None,
+    merged_dir: Path | None = None,
 ) -> Path:
     """Merge all configured PDFs, in YAML order, into one source PDF.
 
-    Default output: data/raw/merged_source.pdf. Returns the merged path.
+    Default output: data/merged/merged_source.pdf — a SEPARATE folder from
+    the raw inputs, so the merged file can never be picked up as an input
+    on a later run (no recursive re-merging). Returns the merged path.
     """
     raw_dir = raw_dir or config.get_path("raw_dir")
     inputs = resolve_configured_pdfs(raw_dir)
@@ -54,7 +58,7 @@ def merge_configured_pdfs(
         log.info("single PDF configured — using it directly: %s", inputs[0])
         return inputs[0]
     if output_path is None:
-        output_path = raw_dir / MERGED_FILENAME
+        output_path = (merged_dir or config.get_path("merged_dir")) / MERGED_FILENAME
     if output_path.resolve() in [p.resolve() for p in inputs]:
         raise ValueError(
             f"merged output collides with one of its input PDFs: {output_path}"

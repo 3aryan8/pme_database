@@ -104,7 +104,7 @@ class ConfigLoader:
 
     def bootstrap_dirs(self) -> None:
         """Create the data/ tree on fresh clones (git doesn't track empty dirs)."""
-        for key in ("raw_dir", "high_res_dir", "high_res_clean_dir",
+        for key in ("raw_dir", "merged_dir", "high_res_dir", "high_res_clean_dir",
                     "vlm_res_dir", "metadata_dir", "processed_dir"):
             self.get_path(key).mkdir(parents=True, exist_ok=True)
 

@@ -443,8 +443,8 @@ def get_report_images(
     examination_id: int,
 ) -> list[ReportImage]:
     """
-    Fetch the four report page images for an examination,
-    in page order (1..4).
+    Fetch the report page images for an examination,
+    in page order (1..N, where N = that person's splits.yaml page count).
     """
 
     statement = (

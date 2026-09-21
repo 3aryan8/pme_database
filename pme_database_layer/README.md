@@ -34,12 +34,14 @@ The raw validated extraction is retained in `extraction_runs.raw_json` for prove
 
 ## Report Images (verification)
 
-Every imported examination stores its four rendered report pages in `report_images`:
+Every imported examination stores its rendered report pages in `report_images`
+(N pages per person, set by the person's page range in `configs/splits.yaml` —
+not a fixed 4):
 
 | column | meaning |
 |---|---|
 | `examination_id` | the report record this belongs to (candidate → latest examination) |
-| `page_number` | 1-based report page (1–4) |
+| `page_number` | 1-based report page (1–N) |
 | `image_path` | where the PNG lives (project-relative when under the pipeline project) |
 | `document_id` | provenance — which extraction document the render came from |
 
@@ -48,7 +50,7 @@ render output (`data/interim/high_res/<document_id>/page_000X.png`, override wit
 `REPORT_IMAGES_DIR`) and inserted in the **same transaction** as the examination —
 a missing page rolls back the whole import, so no orphan rows or partial records.
 
-Retrieve the four images for a candidate:
+Retrieve the report images for a candidate:
 
 ```python
 from pme.database import get_session, init_db
@@ -57,7 +59,7 @@ from pme.repository import get_candidate_report_images
 init_db()
 session = get_session()
 for image in get_candidate_report_images(session, candidate_id):
-    print(image.page_number, image.image_path)   # 1..4, in order
+    print(image.page_number, image.image_path)   # 1..N, in order (N per splits.yaml)
 ```
 
 ## Generic LLM Extraction Pipeline (zero-touch)

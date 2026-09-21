@@ -88,3 +88,18 @@ def test_single_pdf_used_directly_not_reencoded(tmp_path, monkeypatch):
 def test_merge_rejects_empty_input_list(tmp_path):
     with pytest.raises(ValueError):
         merge_pdfs([], tmp_path / "merged.pdf")
+
+
+def test_default_output_goes_to_separate_merged_dir(tmp_path, monkeypatch):
+    """The merged file must NOT land in the raw inputs folder — otherwise a
+    later run could merge the merge again (recursive re-merging)."""
+    for name in ("a.pdf", "b.pdf"):
+        _make_pdf(tmp_path / name, name)
+    monkeypatch.setattr(config, "pdf_sources", _stub_pdfs(["a.pdf", "b.pdf"]))
+    merged_dir = tmp_path / "merged_out"
+
+    out = merge_configured_pdfs(raw_dir=tmp_path, merged_dir=merged_dir)
+
+    assert out.parent == merged_dir
+    assert out.name == "merged_source.pdf"
+    assert not (tmp_path / "merged_source.pdf").exists()
