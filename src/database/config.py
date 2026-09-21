@@ -8,8 +8,9 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# The pipeline project (one level up): data/, configs/, src/ live there.
-MAIN_PROJECT_ROOT = PROJECT_ROOT.parent
+# This package now lives INSIDE the pipeline project (src/database), so
+# the project root IS the main project root (data/, configs/ live there).
+MAIN_PROJECT_ROOT = PROJECT_ROOT
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -20,9 +21,11 @@ DEFAULT_EXTRACTION_DIR = (
 
 
 def get_database_url() -> str:
+    # Absolute, CWD-independent default: a relative sqlite path used to
+    # silently create new empty DBs in whatever directory you ran from.
     return os.getenv(
         "DATABASE_URL",
-        "sqlite:///./data/pme.db",
+        f"sqlite:///{PROJECT_ROOT / 'data' / 'pme.db'}",
     )
 
 

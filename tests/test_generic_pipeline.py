@@ -12,15 +12,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from pme.extraction_schema import MedicalExaminationRecord, ReportTableRow
-from pme.extractor import (
+from src.database.extraction_schema import MedicalExaminationRecord, ReportTableRow
+from src.database.extractor import (
     ExtractionError,
     LLMExtractor,
     build_prompt,
     first_json_object,
 )
-from pme.models import Base
-from pme.store import all_rows, get, save
+from src.database.models import Base
+from src.database.store import all_rows, get, save
 
 
 class FakeClient:

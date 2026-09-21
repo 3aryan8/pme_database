@@ -9,14 +9,13 @@ Stages (each in its own `uv run` subprocess, fail-fast on first error):
   1. core      merge PDFs -> assembly -> preprocessing   (this project)
   2. detect    VLM region detection                      (GPU)
   3. extract   VLM field extraction                      (GPU)
-  4. validate  validate extraction JSONs                 (pme_database_layer)
-  5. import    import extractions + report images -> DB (pme_database_layer)
+  4. validate  validate extraction JSONs                 (src.database)
+  5. import    import extractions + report images -> DB (src.database)
 
-After a successful run, retrieve a candidate's four report images with
-(pme_database_layer):
+After a successful run, retrieve a candidate's report images with
 
-    from pme.database import get_session, init_db
-    from pme.repository import get_candidate_report_images
+    from src.database.database import get_session, init_db
+    from src.database.repository import get_candidate_report_images
     init_db(); session = get_session()
     for img in get_candidate_report_images(session, candidate_id):
         print(img.page_number, img.image_path)
@@ -27,8 +26,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-DB_LAYER = ROOT / "pme_database_layer"
-DB_EXTRACTIONS_DIR = "../data/processed/extractions"  # relative to DB_LAYER
+EXTRACTIONS_DIR = "data/processed/extractions"  # relative to ROOT
 
 
 def stages(skip_gpu: bool) -> list[tuple[str, Path, list[str]]]:
@@ -46,12 +44,12 @@ def stages(skip_gpu: bool) -> list[tuple[str, Path, list[str]]]:
              ["uv", "run", "python", "-m", "src.extraction.run_extraction"]),
         ]
     out += [
-        ("validate: check extraction JSONs", DB_LAYER,
+        ("validate: check extraction JSONs", ROOT,
          ["uv", "run", "python", "scripts/validate_extractions.py",
-          "--directory", DB_EXTRACTIONS_DIR]),
-        ("import: extractions + report images -> database", DB_LAYER,
+          "--directory", EXTRACTIONS_DIR]),
+        ("import: extractions + report images -> database", ROOT,
          ["uv", "run", "python", "scripts/import_extractions.py",
-          "--directory", DB_EXTRACTIONS_DIR]),
+          "--directory", EXTRACTIONS_DIR]),
     ]
     return out
 
@@ -81,8 +79,7 @@ def main() -> int:
             return result.returncode
 
     print("\nPipeline complete: extractions imported, report images stored.")
-    print("Per-candidate reports: "
-          "cd pme_database_layer && uv run python scripts/generate_report.py")
+    print("Per-candidate reports: uv run python scripts/generate_report.py")
     return 0
 
 

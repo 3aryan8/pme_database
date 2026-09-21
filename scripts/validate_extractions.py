@@ -1,6 +1,6 @@
 from pathlib import Path
 import argparse
-from pme.schemas import PMEExtraction
+from src.database.schemas import PMEExtraction
 p=argparse.ArgumentParser(); p.add_argument("--directory", type=Path, default=Path("data/processed/extractions")); a=p.parse_args()
 files=sorted(a.directory.rglob("*.json")); bad=0
 for f in files:

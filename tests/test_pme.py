@@ -1,9 +1,9 @@
 from pathlib import Path
-from pme.schemas import PMEExtraction
+from src.database.schemas import PMEExtraction
 
-# Sample extraction lives in the pipeline project (one level up).
+# Sample extraction lives in the pipeline project's data/.
 SAMPLE = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[1]
     / "data" / "processed" / "extractions"
     / "231c1d5189f1bcd717ab880cca4d0682799911a892bb1974b230982c00721ce7"
     / "record.json"

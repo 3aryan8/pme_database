@@ -1,5 +1,5 @@
 SAMPLE TEXT — generic extraction pipeline demo (not a real candidate).
-Try it:  cd pme_database_layer && uv run python scripts/run_pipeline.py --text samples/sample_report.txt
+Try it (from the project root):  uv run python scripts/run_pipeline.py --text samples/sample_report.txt
 
 PERIODIC MEDICAL EXAMINATION — RRB
 ----------------------------------

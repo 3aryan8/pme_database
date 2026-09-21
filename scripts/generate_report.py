@@ -11,9 +11,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from pme.database import get_session
-from pme.report_generator import generate_report
-from pme.repository import get_examination_by_roll_number
+from src.database.database import get_session
+from src.database.report_generator import generate_report
+from src.database.repository import get_examination_by_roll_number
 
 
 ROLL_NUMBER = "116244151979348"

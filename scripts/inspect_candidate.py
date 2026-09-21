@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import sys
 
-from pme.database import get_session
-from pme.repository import get_examination_by_roll_number
+from src.database.database import get_session
+from src.database.repository import get_examination_by_roll_number
 
 
 def print_value(label: str, value):

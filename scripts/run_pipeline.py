@@ -18,11 +18,11 @@ import importlib
 import os
 from pathlib import Path
 
-from pme.config import PROJECT_ROOT
-from pme.extractor import ExtractionError, LLMExtractor, build_prompt
-from pme.store import create_all, save
+from src.database.config import PROJECT_ROOT
+from src.database.extractor import ExtractionError, LLMExtractor, build_prompt
+from src.database.store import create_all, save
 
-DEFAULT_SCHEMA = "pme.extraction_schema.MedicalExaminationRecord"
+DEFAULT_SCHEMA = "src.database.extraction_schema.MedicalExaminationRecord"
 DEFAULT_TEXT_DIR = PROJECT_ROOT / "samples"
 
 
@@ -90,7 +90,7 @@ def main() -> int:
 
     print(f"\nProcessed: {ok}   Failed: {failed}")
     if ok:
-        print(f"Retrieve: from pme.store import get; "
+        print(f"Retrieve: from src.database.store import get; "
               f"get({schema_cls.__name__}, <record_id>)")
     return 1 if failed else 0
 

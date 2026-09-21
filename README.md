@@ -46,7 +46,7 @@ Preprocessing (src/preprocessing) clean + VLM-sized copies → manifest
         ↓
 Detection / Extraction            (VLM stages, separate entrypoints)
         ↓
-pme_database_layer                validate → SQLite/MySQL → report generation
+src/database (validate+import)  validate → SQLite (data/pme.db) → report generation
 ```
 
 ### Run the whole thing, start to finish
@@ -87,31 +87,59 @@ Every imported report stores its **rendered page images** in the database so ext
 - Images live in the pipeline's standard render output: `data/interim/high_res/<document_id>/page_0000.png .. page_NNNN.png` (assembly output). They are **not** copied — the database stores a path reference (project-relative when possible).
 - Stored per examination (the report record) in the `report_images` table: `examination_id`, `page_number` (1-based, 1–N), `image_path`, `document_id` (provenance). Unique on `(examination_id, page_number)` — exactly one image per page per report.
 - Inserted in the **same transaction** as the candidate/examination: a missing page rolls back the whole import, so no orphan image rows and no partial records are ever left behind.
-- **Retrieving the report images for a candidate** (from `pme_database_layer`):
+- **Retrieving the report images for a candidate** (from the project root):
   ```python
-  from pme.database import get_session, init_db
-  from pme.repository import get_candidate_report_images
+  from src.database.database import get_session, init_db
+  from src.database.repository import get_candidate_report_images
 
   init_db()
   session = get_session()
   for image in get_candidate_report_images(session, candidate_id):
-      print(image.page_number, image.image_path)   # 1..4, in order
+      print(image.page_number, image.image_path)   # 1..N, in order
   ```
   Or by examination: `get_report_images(session, examination_id)`.
 
 ## Generic LLM Extraction Pipeline (zero-touch)
 
-A schema-driven, decoupled text → LLM → schema → DB path in `pme_database_layer`:
+A schema-driven, decoupled text → LLM → schema → DB path in `src/database`:
 the Pydantic schema class is the **single source of truth** — add/remove/rename
 fields there and the LLM prompt, validation, storage, and retrieval all adapt
 without touching extractor, store, or pipeline code (generic over *any*
 Pydantic class).
 
+| file | role |
+|---|---|
+| `src/database/extraction_schema.py` | **the schema** — `MedicalExaminationRecord` (+ `ReportTableRow`). Edit fields here only. |
+| `src/database/extractor.py` | generic LLM extractor: prompt from JSON schema, tolerant JSON recovery, `model_validate` at the trust boundary. Client-agnostic (`complete(prompt) -> str`), default: OpenAI-compatible server via stdlib `urllib`. |
+| `src/database/store.py` | generic store: any validated Pydantic instance → one row in `extraction_records(id, schema_name, payload JSON, created_at)`; `get()`/`all_rows()` validate the payload back into the class. |
+| `scripts/run_pipeline.py` | runner: `text → extract → save`, with `--dry-run` (print the prompt) and `--schema` (any Pydantic class). |
+
 ```bash
-cd pme_database_layer
 uv run python scripts/run_pipeline.py --text samples/sample_report.txt   # text → LLM → validated schema → DB
 uv run python scripts/run_pipeline.py --dry-run                          # print the generated LLM prompt
+
+# retrieve
+uv run python -c "from src.database.extraction_schema import MedicalExaminationRecord as M; \
+                  from src.database.store import all_rows; print(all_rows(M))"
 ```
 
-Details, env vars (`PME_LLM_BASE_URL`, `PME_LLM_MODEL`, ...), and retrieval:
-[pme_database_layer/README.md](pme_database_layer/README.md#generic-llm-extraction-pipeline-zero-touch).
+LLM endpoint (any OpenAI-compatible server — LM Studio, OpenAI, vLLM, Ollama):
+
+| env | default |
+|---|---|
+| `PME_LLM_BASE_URL` | `http://localhost:1234/v1` |
+| `PME_LLM_MODEL` | `qwen/qwen3.8-27b` |
+| `PME_LLM_API_KEY` | *(unset)* |
+| `PME_LLM_MAX_TOKENS` | `8192` |
+| `PME_LLM_TIMEOUT` | `300` |
+
+Notes:
+
+- The generic `extraction_records` table is separate from the normalized
+  relational tables (`candidates`, `medical_examinations`, ...) — those stay
+  the curated store for the VLM pipeline; this is the schema-driven path.
+- `payload` stores the validated instance as JSON, so schema evolution needs
+  no table migration and never breaks old rows' reads (they validate against
+  the current class or raise clearly).
+- Tests: `uv run pytest tests/test_generic_pipeline.py -q` (fake LLM client,
+  in-memory SQLite — no network, no GPU).

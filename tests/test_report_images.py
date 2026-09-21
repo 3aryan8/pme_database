@@ -10,15 +10,15 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
-from pme.config import MAIN_PROJECT_ROOT
-from pme.importer import import_one, to_stored_path
-from pme.models import Base, Candidate, MedicalExamination, ReportImage
-from pme.report_images import find_report_images
-from pme.repository import (
+from src.database.config import MAIN_PROJECT_ROOT
+from src.database.importer import import_one, to_stored_path
+from src.database.models import Base, Candidate, MedicalExamination, ReportImage
+from src.database.report_images import find_report_images
+from src.database.repository import (
     get_candidate_report_images,
     get_report_images,
 )
-from pme.schemas import PMEExtraction
+from src.database.schemas import PMEExtraction
 
 DOC_A = "doc_alpha"
 DOC_B = "doc_beta"
