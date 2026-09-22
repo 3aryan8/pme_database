@@ -19,3 +19,5 @@
 # pages, per configs/splits.yaml), colored_data.pdf, RRB SCAN 16092026.pdf.
 pdfs:
   - black_dataset.pdf
+  - colored_data.pdf
+  - RRB SCAN 16092026.pdf
