@@ -57,7 +57,115 @@ uv run python run_all.py --skip-gpu   # CPU stages only; validate+import run on 
 uv run python run_all.py --dry-run    # print the plan, run nothing
 ```
 
-Stages: `core` (merge → assembly → preprocess) → `detect` (GPU) → `extract` (GPU) → `validate` → `import` (extractions + 4 report images into the DB). Fail-fast: stops at the first failing stage.
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11 or newer
+- [`uv`](https://docs.astral.sh/uv/) for dependency and environment management
+- A local OpenAI-compatible LLM server for the generic extraction workflow
+- NVIDIA drivers and the NVIDIA Container Toolkit for VLM detection/extraction
+
+Install the project and development dependencies:
+
+```bash
+uv sync --dev
+```
+
+The pipeline expects input PDFs in `data/raw/`. Add their filenames to
+`configs/pdf_sources.yaml`, review `configs/splits.yaml`, and then run the
+appropriate pipeline command from the project root.
+
+### Useful Commands
+
+```bash
+# Run the complete workflow
+uv run python run_all.py
+
+# Run only merge, assembly, and preprocessing
+uv run python -m src.run_pipeline --phase all
+
+# Run the test suite
+uv run pytest tests/ -v
+
+# Validate extraction files without importing them
+uv run python scripts/validate_extractions.py \
+        --directory data/processed/extractions
+
+# Import validated extractions into the database
+uv run python scripts/import_extractions.py \
+        --directory data/processed/extractions
+
+# Launch the local Streamlit dashboard
+uv run streamlit run frontend/app.py
+```
+
+The dashboard reads from the database configured by the `data.database`
+package and displays searchable candidate records with their source images.
+
+## Configuration
+
+Pipeline configuration is kept in `configs/`:
+
+| file | purpose |
+| --- | --- |
+| `pdf_sources.yaml` | ordered raw PDF inputs |
+| `splits.yaml` | pages per person and manual page ranges |
+| `pipeline.yaml` | stage and processing settings |
+| `regions.yaml` | detection region definitions |
+| `models.yaml` | model and inference settings |
+| `schema.yaml` | fields extracted by the VLM pipeline |
+| `schema.baseline.yaml` | baseline schema for comparison |
+| `holdout_ids.txt` | IDs reserved for evaluation |
+
+Database connection settings are read from environment variables by the
+database configuration module. The default local workflow uses SQLite; keep
+credentials and machine-specific settings in a local `.env` file rather than
+committing them.
+
+## Docker
+
+Build the development image and open a shell:
+
+```bash
+make build
+make shell
+```
+
+Run the test suite in the container:
+
+```bash
+make test
+```
+
+Verify NVIDIA GPU passthrough and run GPU-enabled commands with:
+
+```bash
+make verify-gpu
+make gpu CMD="python -m src.detection.run_detection"
+```
+
+The GPU compose override requires a native Docker daemon with the NVIDIA
+Container Toolkit. Label Studio is available at `http://localhost:8080` when
+the compose services are started.
+
+## Repository Layout
+
+```text
+configs/       versioned pipeline, model, split, and schema configuration
+data/          raw inputs, intermediate artifacts, ground truth, and reports
+frontend/      Streamlit candidate database dashboard
+scripts/       validation, import, reporting, and inspection utilities
+src/           pipeline stages and database implementation
+tests/         unit and integration tests
+docker/        CPU and GPU Docker Compose definitions
+```
+
+Generated files under `data/` can be removed with `make clean`. Raw PDFs,
+ground-truth annotations, configuration files, and other source material are
+not removed by that command.
+
+Stages: `core` (merge → assembly → preprocess) → `detect` (GPU) → `extract` (GPU) → `validate` → `import` (extractions + rendered report images into the DB). Fail-fast: stops at the first failing stage.
 
 ### CPU-only core pipeline
 
