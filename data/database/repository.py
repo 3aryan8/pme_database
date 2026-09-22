@@ -75,14 +75,15 @@ def get_dashboard_stats(session: Session) -> dict[str, int]:
 
 def get_candidate_directory(
     session: Session,
-    limit: int = 100,
+    limit: int | None = None,
 ) -> list[Candidate]:
     """Return candidates for the dashboard directory."""
-    return list(session.scalars(
-        select(Candidate)
-        .order_by(func.lower(Candidate.candidate_name), Candidate.id)
-        .limit(limit)
-    ).all())
+    statement = select(Candidate).order_by(
+        func.lower(Candidate.candidate_name), Candidate.id
+    )
+    if limit is not None:
+        statement = statement.limit(limit)
+    return list(session.scalars(statement).all())
 
 
 def get_candidate_by_id(

@@ -265,10 +265,19 @@ def show_candidate(candidate: Candidate) -> None:
             st.markdown("</div>", unsafe_allow_html=True)
 
         if extraction_runs:
-            with st.expander("Complete extracted data", expanded=False):
-                st.json(extraction_runs[0].raw_json)
+            with st.expander(
+                f"Complete extracted data ({len(extraction_runs)} run(s))",
+                expanded=False,
+            ):
+                for extraction in extraction_runs:
+                    extracted_label = extraction.document_id
+                    if extraction.model_name:
+                        extracted_label += f" · {extraction.model_name}"
+                    with st.expander(extracted_label, expanded=False):
+                        st.json(extraction.raw_json)
 
 
+@st.fragment(run_every="60s")
 def main() -> None:
     init_db()
     with get_session() as session:
@@ -339,9 +348,16 @@ def main() -> None:
                 submitted = st.form_submit_button("Search", type="primary", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
+        if "search_candidate_ids" not in st.session_state:
+            st.session_state.search_candidate_ids = []
+        if "search_error" not in st.session_state:
+            st.session_state.search_error = None
+
         if submitted:
+            st.session_state.search_candidate_ids = []
+            st.session_state.search_error = None
             if not name.strip() or not father_name.strip() or not dob_text.strip():
-                st.error("Enter candidate name, father's name, and date of birth.")
+                st.session_state.search_error = "Enter candidate name, father's name, and date of birth."
             else:
                 try:
                     dob = datetime.strptime(
@@ -349,30 +365,39 @@ def main() -> None:
                         "%d-%m-%Y",
                     ).date()
                 except ValueError:
-                    st.error("Enter DOB in DD-MM-YYYY format, for example 21-02-1996.")
+                    st.session_state.search_error = "Enter DOB in DD-MM-YYYY format, for example 21-02-1996."
                 else:
                     with get_session() as session:
                         matches = search_candidates(session, name, father_name, dob)
-                        candidate_ids = [candidate.id for candidate in matches]
-                        candidates = [
-                            session.scalar(select(Candidate).where(Candidate.id == candidate_id))
-                            for candidate_id in candidate_ids
-                        ]
-                    if not candidates:
-                        st.markdown(
-                            '<div class="empty-state"><strong>No candidate found</strong><br>'
-                            'Check the spelling of the name, father’s name, and DOB, then try again.</div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            f'<div class="record-heading"><h3>Candidate result</h3>'
-                            f'<span class="record-count">{len(candidates)} matching record(s)</span></div>',
-                            unsafe_allow_html=True,
-                        )
-                        for candidate in candidates:
-                            if candidate:
-                                show_candidate(candidate)
+                    st.session_state.search_candidate_ids = [
+                        candidate.id for candidate in matches
+                    ]
+
+        if st.session_state.search_error:
+            st.error(st.session_state.search_error)
+        elif st.session_state.search_candidate_ids:
+            with get_session() as session:
+                candidates = list(session.scalars(
+                    select(Candidate).where(
+                        Candidate.id.in_(st.session_state.search_candidate_ids)
+                    )
+                ).all())
+            candidates.sort(
+                key=lambda candidate: st.session_state.search_candidate_ids.index(candidate.id)
+            )
+            st.markdown(
+                f'<div class="record-heading"><h3>Candidate result</h3>'
+                f'<span class="record-count">{len(candidates)} matching record(s)</span></div>',
+                unsafe_allow_html=True,
+            )
+            for candidate in candidates:
+                show_candidate(candidate)
+        elif submitted:
+            st.markdown(
+                '<div class="empty-state"><strong>No candidate found</strong><br>'
+                'Check the spelling of the name, father’s name, and DOB, then try again.</div>',
+                unsafe_allow_html=True,
+            )
     else:
         st.markdown(
             '<div class="panel"><div class="section-kicker">Records</div>'
