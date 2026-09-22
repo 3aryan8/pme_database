@@ -3,13 +3,21 @@
 # - Filenames resolve against data/raw/ — put the source PDFs there.
 # - Order matters: the merged PDF's page order is exactly this list's order.
 # - All listed PDFs must exist or the pipeline fails with a clear error.
-# - A SINGLE entry is used directly (no re-encoding), so document IDs stay
-#   stable (document_id = sha256(source_sha : person_index)).
+# - Output is ALWAYS data/merged/merged_source.pdf (separate folder — it can
+#   never be re-merged as an input on a later run). That merged file is the
+#   ONLY input the rest of the pipeline consumes.
+# - A SINGLE entry is copied byte-for-byte (SHA preserved, so document IDs
+#   stay stable: document_id = sha256(source_sha : person_index)). Several
+#   entries are merged in order (new SHA -> new document IDs; re-run the
+#   pipeline from scratch).
+# - Adding more PDFs grows the merged source — configs/splits.yaml splits it
+#   dynamically (pages_per_person), so no static page ranges to re-verify;
+#   the merged page count just has to be a multiple of pages_per_person
+#   (assembly refuses to guess a partial person).
 #
-# Adding more PDFs changes the merged source — re-verify configs/splits.yaml
-# person boundaries against the new page layout (assembly refuses to guess).
-#
-# data/raw currently holds: black_dataset.pdf (48 pages = the 12-person source
-# described by configs/splits.yaml), colored_data.pdf, RRB SCAN 16092026.pdf.
+# data/raw currently holds: black_dataset.pdf (48 pages = 12 persons x 4
+# pages, per configs/splits.yaml), colored_data.pdf, RRB SCAN 16092026.pdf.
 pdfs:
   - black_dataset.pdf
+  - colored_data.pdf
+  - RRB SCAN 16092026.pdf

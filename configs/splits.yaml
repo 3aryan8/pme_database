@@ -1,25 +1,23 @@
-# Person split map for the multi-person source PDF.
-# Page numbers are 1-based, INCLUSIVE — count them like a PDF viewer does.
-# This file contains only page indices — no PII — safe to commit.
+# Person split map for the pipeline's source PDF — the MERGED PDF
+# (data/merged/merged_source.pdf), always, whether one or many PDFs are
+# configured in configs/pdf_sources.yaml.
 #
-# Identified by visual inspection of all 48 pages:
-# - Header pages (Railway Recruitment Board, photo, name, DOB) mark person starts
-# - Confirmed person boundaries: p1, p5, p9, p13, p17, p25, p33, p41
+# DYNAMIC MODE — no static page ranges:
+#   Every person occupies exactly `pages_per_person` consecutive pages, in
+#   page order. Person count = merged page count / pages_per_person, so the
+#   map stays correct when more PDFs are added and the merged PDF grows.
 #
-# Assembly REFUSES to run until confirmed is true.
-source: "data/raw/RRB_SCAN_16062023.pdf"
+# Assembly REFUSES to run when:
+#   - confirmed is false, or
+#   - the merged PDF's page count is not a multiple of pages_per_person
+#     (it never guesses a partial person).
+#
+# Non-uniform reports (a person with 3 or 6 pages): replace
+# pages_per_person with an explicit 'persons' list of page ranges —
+# scripts/make_splits.py and src.detection.pose_splits draft that format.
+#
+# This file contains no PII — safe to commit.
+source: "data/merged/merged_source.pdf"
 confirmed: true
-persons:
-  - pages: [1, 4]    # Person 1: DINESH DODWARIYA
-  - pages: [5, 8]    # Person 2: MAHENDRA KUMAR YADAV
-  - pages: [9, 12]   # Person 3: GANERKAR VISHAL SANJAY
-  - pages: [13, 16]  # Person 4: PATIL TUSHAR PURNA
-  - pages: [17, 20]  # Person 5: VEKKY DHOTE
-  - pages: [21, 24]  # Person 6: Abhay patidar
-  - pages: [25, 28]  # Person 7: SHUBHAM GAUR
-  - pages: [29, 32]  # Person 8: RAKESH KUMAR KUMAWAT
-  - pages: [33, 36]  # Person 9: RAHUL KUMAR MEENA
-  - pages: [37, 40]  # Person 10: PRAKASH CHANDRA MURMU
-  - pages: [41, 44]  # Person 11: AAKASH KUSHWAHA
-  - pages: [45, 48]  # Person 12: AJAY SINGH
+pages_per_person: 4
 ignored_pages: []

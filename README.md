@@ -40,7 +40,7 @@ PDF merge (src/pdf_merge)         locate + validate + merge in YAML order
         ↓
 data/merged/merged_source.pdf     single batched source PDF (separate folder — never re-merged)
         ↓
-Assembly (src/assembly)           split per configs/splits.yaml → render N pages/person (per-person page ranges)
+Assembly (src/assembly)           split per configs/splits.yaml (pages_per_person — count derived from the merged page count) → render N pages/person
         ↓
 Preprocessing (src/preprocessing) clean + VLM-sized copies → manifest
         ↓
@@ -75,15 +75,15 @@ Before assembly, the pipeline merges the configured raw PDFs into one batched so
    ```
    Order matters — the merged PDF's page order is exactly this list's order. All listed PDFs must exist or the pipeline fails with a clear error naming the missing files.
 2. **Where input PDFs go:** `data/raw/` (filenames in the YAML resolve against this directory).
-3. **Where the merged PDF lands:** `data/merged/merged_source.pdf` — a **separate folder** from the raw inputs, so the merged file can never be picked up as an input on a later run (no recursive re-merging). Overwritten on re-run; input PDFs are never modified or deleted. A **single** configured PDF is used directly — no re-encoding, so document IDs stay stable (document IDs derive from the source file SHA).
-4. **How the pipeline uses it:** `src/run_pipeline.py` calls `merge_configured_pdfs()` and passes the result to assembly, which splits it into per-person reports. The person boundaries in `configs/splits.yaml` must describe the *merged* PDF's page layout (assembly refuses to run on unverified boundaries).
+3. **Where the merged PDF lands:** `data/merged/merged_source.pdf` — a **separate folder** from the raw inputs, so the merged file can never be picked up as an input on a later run (no recursive re-merging). Input PDFs are never modified or deleted. A **single** configured PDF is **copied byte-for-byte** into this folder (SHA preserved → document IDs stay stable, no re-encoding); several are merged in YAML order (new SHA → new document IDs). The merged file is the **only input the rest of the pipeline consumes** — `data/raw` is never read downstream.
+4. **How the pipeline uses it:** `src/run_pipeline.py` calls `merge_configured_pdfs()` and passes the result to assembly. `configs/splits.yaml` splits it **dynamically**: `pages_per_person` consecutive pages per person, person count = merged page count / `pages_per_person` — so the map stays correct when the merged PDF grows. Assembly refuses unconfirmed maps and page counts that are not a multiple of `pages_per_person` (no partial-person guessing).
 5. **Standalone:** `uv run python -m src.pdf_merge.run_merge`
 
 ## Report Images (verification)
 
 Every imported report stores its **rendered page images** in the database so extracted values can be visually checked against the original scan.
 
-- **N pages per person is set by `configs/splits.yaml`** (the person's page range), not a fixed 4 — a person with 3 or 6 report pages works the same way. The import cross-checks the rendered count against the record's declared coverage (`pages_covered`) and fails atomically on mismatch.
+- **N pages per person is set by `configs/splits.yaml`** (`pages_per_person`, or that person's manual page range), not a fixed 4 — a person with 3 or 6 report pages works the same way. The import cross-checks the rendered count against the record's declared coverage (`pages_covered`) and fails atomically on mismatch.
 - Images live in the pipeline's standard render output: `data/interim/high_res/<document_id>/page_0000.png .. page_NNNN.png` (assembly output). They are **not** copied — the database stores a path reference (project-relative when possible).
 - Stored per examination (the report record) in the `report_images` table: `examination_id`, `page_number` (1-based, 1–N), `image_path`, `document_id` (provenance). Unique on `(examination_id, page_number)` — exactly one image per page per report.
 - Inserted in the **same transaction** as the candidate/examination: a missing page rolls back the whole import, so no orphan image rows and no partial records are ever left behind.
