@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from io import BytesIO
 import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
 import logging
 
+import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
@@ -66,8 +68,8 @@ st.markdown(
     .search-panel { border-top: 4px solid var(--teal); }
     .section-kicker { color: var(--teal); font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
     .section-title { font-family: 'Manrope'; color: var(--deep); font-size: 1.2rem; font-weight: 800; margin: .12rem 0 .55rem; }
-    .detail-card { padding: 1.25rem; height: 100%; border: 1px solid #b8e2d5; border-top: 4px solid var(--teal); background: linear-gradient(180deg, #f0fbf7 0%, #ffffff 34%); }
-    .detail-card h4 { margin: 0 0 .85rem; font-size: 1rem; color: #087563; }
+    .detail-card { padding: .6rem .8rem; min-height: 64px; box-sizing: border-box; border: 1px solid #b8e2d5; border-top: 3px solid var(--teal); background: linear-gradient(180deg, #f0fbf7 0%, #ffffff 34%); }
+    .detail-card h4 { margin: 0 0 .35rem; font-size: .9rem; color: #087563; }
     .kv { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #edf4f1; padding: .52rem 0; }
     .kv:last-child { border-bottom: 0; }
     .kv span:first-child { color: var(--muted); font-size: .84rem; }
@@ -92,10 +94,28 @@ st.markdown(
     [data-testid="stTextInput"] input:focus { border-color: #087563; box-shadow: 0 0 0 3px rgba(15,139,120,.24); }
     [data-testid="stFormSubmitButton"] button, [data-testid="stBaseButton-primary"] { background: var(--teal); border: 0; border-radius: 10px; font-weight: 700; }
     [data-testid="stFormSubmitButton"] button:hover, [data-testid="stBaseButton-primary"]:hover { background: #0b7465; }
+    [data-testid="stDownloadButton"] button { background: var(--teal) !important; color: #ffffff !important; border: 1px solid #087563 !important; border-radius: 10px; font-weight: 700; }
+    [data-testid="stDownloadButton"] button p { color: #ffffff !important; }
+    [data-testid="stDownloadButton"] button:hover { background: #0b7465 !important; border-color: #075f51 !important; }
+    [data-testid="stDownloadButton"] button:focus-visible { outline: 3px solid #7ce0b4; outline-offset: 2px; }
     [data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
     [data-testid="stMetric"] { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: .8rem 1rem; }
     [data-testid="stFileUploader"] { border-radius: 12px; }
-    @media (max-width: 760px) { .block-container { padding: .7rem; } .hero { padding: 1rem; } .hero:after { font-size: 7rem; } .record-heading { display: block; } }
+    [data-testid="stCaptionContainer"] code { display: inline-block; max-width: 100%; padding: .16rem .38rem; border: 1px solid #8ed2bf; border-radius: 5px; background: #e7f8f1; color: #075f51 !important; font-weight: 700; overflow-wrap: anywhere; word-break: break-all; }
+        @media (max-width: 760px) {
+            .block-container { padding: .7rem; }
+            .hero { padding: 1rem; }
+            .hero:after { font-size: 7rem; }
+            .record-heading { display: block; }
+            [data-testid="stHorizontalBlock"] { flex-direction: column !important; gap: .65rem !important; }
+            [data-testid="stHorizontalBlock"] > [data-testid="column"] { width: 100% !important; flex: 1 1 100% !important; min-width: 100% !important; }
+            .metric-card { min-height: 68px; }
+            .metric-value { font-size: 1.45rem; }
+            .panel { padding: .75rem; }
+            .detail-card { min-height: 0; padding: 1rem; }
+            .kv { align-items: flex-start; }
+            .kv span:last-child { max-width: 58%; overflow-wrap: anywhere; }
+        }
 
     /* Make expanders and their headers use a white background for clarity */
     .st-expander, .stExpander, .st-expanderHeader, .stExpanderHeader, .streamlit-expander, .streamlit-expanderHeader {
@@ -109,6 +129,10 @@ st.markdown(
       background: #ffffff !important;
       color: var(--ink) !important;
     }
+        [data-testid="stExpander"] { background: #ffffff !important; border: 1px solid var(--line) !important; border-radius: 10px !important; }
+        [data-testid="stExpander"] summary, [data-testid="stExpander"] summary:hover { background: #ffffff !important; color: var(--ink) !important; }
+        [data-testid="stExpander"] summary p, [data-testid="stExpander"] summary span,
+        [data-testid="stExpander"] summary svg { color: var(--ink) !important; fill: var(--ink) !important; }
 
     </style>
     """,
@@ -285,6 +309,9 @@ def main() -> None:
     with get_session() as session:
         stats = get_dashboard_stats(session)
 
+    if "sync_message" not in st.session_state:
+        st.session_state.sync_message = None
+
     st.markdown(
         '<div class="hero"><div class="eyebrow">PME records · clinical data workspace</div>'
         '<h1>Candidate Database</h1>'
@@ -293,12 +320,10 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    metric_columns = st.columns(4)
+    metric_columns = st.columns(2)
     metric_data = (
         ("Total candidates", stats["candidates"]),
         ("Medical examinations", stats["examinations"]),
-        ("Extraction runs", stats["extraction_runs"]),
-        ("Declarations stored", stats["declarations"]),
     )
     for column, (label, value) in zip(metric_columns, metric_data):
         with column:
@@ -313,13 +338,25 @@ def main() -> None:
         st.caption("Connected directly to the existing database")
         page = st.radio("Navigate", ["Search candidate", "Candidate directory"])
         if st.button("Sync extraction files", use_container_width=True):
-            with get_session() as session:
-                imported, failed = sync_extractions(session)
-            if failed:
-                st.warning(f"Sync completed with {failed} failed file(s).")
-            else:
-                st.success(f"Database synced. Processed {imported} file(s).")
+            with st.spinner("Fetching and syncing extraction files..."):
+                try:
+                    with get_session() as session:
+                        imported, failed = sync_extractions(session)
+                except Exception as error:
+                    LOGGER.exception("Manual extraction sync failed")
+                    st.session_state.sync_message = (
+                        "error",
+                        f"Sync failed: {error}",
+                    )
+                else:
+                    st.session_state.sync_message = ("success", "Data synced")
             st.rerun()
+        if st.session_state.sync_message:
+            message_type, message = st.session_state.sync_message
+            if message_type == "success":
+                st.success(message)
+            else:
+                st.warning(message)
         st.divider()
         st.caption(f"Database URL: {os.getenv('DATABASE_URL', 'SQLite · data/pme.db')}")
 
@@ -444,6 +481,47 @@ def main() -> None:
                     "Recruitment CEN": st.column_config.TextColumn("Recruitment CEN", width="small"),
                 },
             )
+            with get_session() as session:
+                export_rows = []
+                for candidate in candidates:
+                    examination = get_latest_examination_for_candidate(session, candidate.id)
+                    fitness = examination.fitness if examination else None
+                    doctor = examination.examining_doctor if examination else None
+                    export_rows.append({
+                        "Candidate name": candidate.candidate_name,
+                        "Father's name": candidate.father_name,
+                        "Date of birth": candidate.date_of_birth,
+                        "Roll number": candidate.roll_number,
+                        "Recruitment CEN": candidate.recruitment_cen,
+                        "Medical examination date": examination.medical_examination_date if examination else None,
+                        "DV date": examination.dv_date if examination else None,
+                        "Medical class": examination.medical_class if examination else None,
+                        "Candidate declaration date": examination.candidate_declaration_date if examination else None,
+                        "Doctor": doctor.doctor_name if doctor else None,
+                        "Fit in class": fitness.fit_in_class if fitness else None,
+                        "Unfit in class": fitness.unfit_in_class if fitness else None,
+                    })
+            export_frame = pd.DataFrame(export_rows)
+            csv_data = export_frame.to_csv(index=False).encode("utf-8")
+            excel_buffer = BytesIO()
+            export_frame.to_excel(excel_buffer, index=False, engine="openpyxl")
+            download_columns = st.columns(2)
+            with download_columns[0]:
+                st.download_button(
+                    "Download CSV",
+                    data=csv_data,
+                    file_name="filtered_candidates.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            with download_columns[1]:
+                st.download_button(
+                    "Download Excel",
+                    data=excel_buffer.getvalue(),
+                    file_name="filtered_candidates.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
             if not candidates:
                 st.info("No candidates match this filter.")
         else:

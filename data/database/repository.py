@@ -62,7 +62,8 @@ def get_dashboard_stats(session: Session) -> dict[str, int]:
             select(func.count()).select_from(Candidate)
         ) or 0,
         "examinations": session.scalar(
-            select(func.count()).select_from(MedicalExamination)
+            select(func.count(func.distinct(MedicalExamination.candidate_id)))
+            .select_from(MedicalExamination)
         ) or 0,
         "extraction_runs": session.scalar(
             select(func.count()).select_from(ExtractionRun)
