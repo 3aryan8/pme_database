@@ -1,3 +1,4 @@
+# Phase: normalized database validation | Input: extraction JSON | Output: validated PMEExtraction model | Command: ``uv run python scripts/validate_extractions.py``.
 from __future__ import annotations
 
 import json

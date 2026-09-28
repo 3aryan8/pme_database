@@ -1,3 +1,4 @@
+# Phase: assembly | Input: validated page metadata | Output: manifest parquet | Command: ``uv run python -m src.assembly.run_assembly``.
 """Writes manifest.parquet. Every row passes the AssemblyRow Pydantic
 contract BEFORE being written — the parquet on disk is guaranteed valid."""
 import pandas as pd

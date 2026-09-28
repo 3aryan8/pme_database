@@ -1,3 +1,4 @@
+# Phase: generic database extraction | Input: report text and LLM response | Output: validated schema instance | Command: ``uv run python scripts/run_pipeline.py --dry-run``.
 """Generic LLM extraction: raw text -> validated Pydantic/SQLModel object.
 
 Schema-agnostic by design: `LLMExtractor.extract(text, schema_cls)` works

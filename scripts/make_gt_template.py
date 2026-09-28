@@ -1,3 +1,4 @@
+# Phase: ground-truth preparation | Input: extraction records | Output: editable GT JSON skeletons | Command: ``uv run python scripts/make_gt_template.py --ndocs 6``.
 """Generate ground-truth skeletons for hand-typing.
 
 Usage: uv run python scripts/make_gt_template.py --ndocs 6

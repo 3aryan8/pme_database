@@ -1,3 +1,4 @@
+# Phase: database report verification | Input: rendered page directory | Output: ordered report-image paths | Command: ``uv run python -m src.database.run_database``.
 """Locate the rendered report pages for one document.
 
 The assembly stage renders every person's report to
@@ -9,6 +10,7 @@ coverage), a different render count fails the whole import atomically.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .config import get_report_images_dir
@@ -27,10 +29,33 @@ def find_report_images(
     exist at all, raises FileNotFoundError — no partial report images.
     """
     base = (base_dir or get_report_images_dir()) / document_id
-    pages = sorted(p for p in base.glob("page_*.png") if p.is_file())
+    numbered_pages = []
+    for path in base.glob("page_*.png"):
+        if not path.is_file():
+            continue
+        match = re.fullmatch(r"page_(\d{4})\.png", path.name)
+        if match is None:
+            raise FileNotFoundError(
+                f"invalid rendered report page name for document "
+                f"{document_id}: {path.name}"
+            )
+        numbered_pages.append((int(match.group(1)), path))
+
+    pages = [path for _, path in sorted(numbered_pages)]
     if not pages:
         raise FileNotFoundError(
             f"no rendered report pages for document {document_id} in {base}"
+        )
+    page_numbers = [number for number, _ in sorted(numbered_pages)]
+    if page_numbers != list(range(page_numbers[0], page_numbers[0] + len(page_numbers))):
+        raise FileNotFoundError(
+            f"rendered report pages are not contiguous for document "
+            f"{document_id} in {base}"
+        )
+    if page_numbers[0] != 0:
+        raise FileNotFoundError(
+            f"rendered report pages must start at page_0000 for document "
+            f"{document_id} in {base}"
         )
     if expected is not None and len(pages) != expected:
         raise FileNotFoundError(

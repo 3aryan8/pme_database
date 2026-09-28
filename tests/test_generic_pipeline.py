@@ -1,3 +1,7 @@
+"""Tests for the generic text-to-schema database pipeline.
+
+Phase: database generic extraction. Input: text, fake LLM responses, and Pydantic schemas. Output: validated prompts and isolated stored records. Command: ``uv run pytest tests/test_generic_pipeline.py -q``.
+"""
 """Tests for the generic text -> LLM -> schema -> DB pipeline.
 
 Covers: prompt built from the schema class, tolerant JSON recovery,

@@ -1,3 +1,4 @@
+# Phase: dashboard | Input: normalized database and report-image paths | Output: Streamlit candidate search and review UI | Command: ``uv run streamlit run frontend/app.py``.
 from __future__ import annotations
 
 from io import BytesIO
@@ -15,16 +16,17 @@ REPO_DIR = Path(__file__).resolve().parents[1]
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
-from data.database.database import get_session, init_db
-from data.database.importer import sync_extractions
-from data.database.models import Candidate
-from data.database.repository import (
+from src.database.config import MAIN_PROJECT_ROOT
+from src.database.database import get_session, init_db
+from src.database.importer import sync_extractions
+from src.database.models import Candidate
+from src.database.repository import (
     get_candidate_directory,
+    get_candidate_report_images,
     get_dashboard_stats,
     get_latest_examination_for_candidate,
     search_candidates,
 )
-from data.database.source_images import get_original_image_paths
 
 
 LOGGER = logging.getLogger(__name__)
@@ -191,7 +193,13 @@ def show_candidate(candidate: Candidate) -> None:
                 "Candidate found, but original image is not available."
             )
         else:
-            image_paths = get_original_image_paths(document_id)
+            report_images = get_candidate_report_images(session, candidate.id)
+            image_paths = [
+                MAIN_PROJECT_ROOT / image.image_path
+                if not Path(image.image_path).is_absolute()
+                else Path(image.image_path)
+                for image in report_images
+            ]
             if image_paths:
                 image_columns = st.columns(
                     min(len(image_paths), 4)
@@ -246,11 +254,11 @@ def show_candidate(candidate: Candidate) -> None:
             kv("Sugar", case.sugar if case else None)
             kv("Albumin", case.alb if case else None)
             kv("Remarks", case.handwritten_remarks if case else None)
-            if case and case.measurements:
+            if case and case.vision_rows:
                 st.caption("Measurements")
                 st.dataframe(
-                    [{"Row": row.row_label, "Right": row.column_1, "Left": row.column_2}
-                     for row in case.measurements],
+                    [{"Row": row.row_label, "Right": row.right_value, "Left": row.left_value}
+                     for row in case.vision_rows],
                     use_container_width=True,
                     hide_index=True,
                 )

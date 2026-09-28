@@ -1,4 +1,4 @@
-# src/utils/logger.py
+# Phase: shared utilities | Input: logger name and environment settings | Output: configured logger | Command: used by all module runners.
 import logging, sys, os
 
 def setup_logger(name: str = "pipeline") -> logging.Logger:

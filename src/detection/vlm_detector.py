@@ -1,3 +1,4 @@
+# Phase: detection | Input: page image and detection configuration | Output: validated region predictions | Command: ``uv run python -m src.detection.run_detection``.
 """VLM region-detection prototype (the roadmap's Phase 2 baseline experiment).
 
 Coordinate handling — the part that usually silently breaks:

@@ -1,3 +1,4 @@
+# Phase: PDF merge | Input: ordered PDF paths | Output: one merged PDF | Command: ``uv run python -m src.pdf_merge.run_pdf_merge``.
 """Merge PDF files into one document (pure function — no config access).
 
 Uses pymupdf, already a project dependency. Inputs are opened read-only

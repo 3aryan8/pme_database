@@ -1,3 +1,4 @@
+# Phase: preprocessing | Input: assembly manifest and rendered pages | Output: cleaned/VLM images and updated manifest | Command: ``uv run python -m src.preprocessing.run_preprocessing``.
 """Phase 4 entrypoint: raw renders -> cleaned + VLM copies; manifest upgrade.
 
 - Every processed row is validated against ManifestRow BEFORE the manifest

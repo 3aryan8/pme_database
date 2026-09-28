@@ -1,3 +1,4 @@
+# Phase: configuration validation | Input: YAML files under configs/ | Output: config validation status | Command: ``uv run python src/validate_schema.py``.
 """Gate 1 evidence: validates every config file against its Pydantic contract.
 
 Exit code 0 = all valid. Exit code 1 = at least one config is invalid.

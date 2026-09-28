@@ -1,3 +1,4 @@
+# Phase: generic database storage | Input: validated Pydantic instance | Output: committed extraction_records row | Command: ``uv run python scripts/run_pipeline.py``.
 """Generic database handler: any validated Pydantic instance -> committed row.
 
 One generic table stores records for ANY schema class:

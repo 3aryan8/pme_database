@@ -1,3 +1,4 @@
+# Phase: extraction | Input: preprocessed manifest and page images | Output: canonical extraction records and provenance | Command: ``uv run python -m src.extraction.run_extraction``.
 """Phase 5 runner: single-pass document extraction (default) + per-page A/B.
 
 Usage:

@@ -1,3 +1,7 @@
+"""Tests for adaptive page rendering.
+
+Phase: assembly/rendering. Input: synthetic and fixture PDF/image data. Output: verified render dimensions and DPI behavior. Command: ``uv run pytest tests/test_adaptive_rendering.py -q``.
+"""
 """Adaptive rendering tests (synthetic PDFs — no real data needed).
 
 Rule under test: page dpi = min(effective source dpi, render_dpi cap).

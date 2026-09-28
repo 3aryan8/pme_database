@@ -1,3 +1,4 @@
+# Phase: ground-truth evaluation | Input: raw GT and extraction values | Output: normalized comparison values | Command: ``uv run python -m src.ground_truth.run_ground_truth``.
 """Value canonicalization for scoring (later: DB loading).
 Small and explicit on purpose — the model transcribes, we canonicalize."""
 import re

@@ -1,3 +1,4 @@
+# Phase: database connection | Input: configured database URL | Output: SQLAlchemy engine and sessions | Command: ``uv run python -m src.database.run_database --help``.
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 

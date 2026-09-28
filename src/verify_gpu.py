@@ -1,3 +1,4 @@
+# Phase: environment verification | Input: NVIDIA runtime and torch installation | Output: GPU availability status | Command: ``uv run python src/verify_gpu.py``.
 """GPU verification for Group 1.
 
 Checks: (1) NVIDIA driver + container-toolkit passthrough (nvidia-smi works

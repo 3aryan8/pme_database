@@ -1,3 +1,4 @@
+# Phase: evaluation safeguards | Input: configs/holdout_ids.txt and tracked text | Output: leakage status | Command: ``uv run python scripts/check_holdout_leakage.py``.
 """No holdout document_id may appear in any tracked text file
 (configs/, src/, scripts/, tests/). Exit 0 = clean, 1 = leakage/missing setup.
 

@@ -1,10 +1,11 @@
+# Phase: detection support | Input: source PDF pages | Output: reviewed split draft | Command: ``uv run python -m src.detection.pose_splits``.
 """Propose person boundaries in the multi-person PDF using the VLM.
 
 Writes configs/splits_draft.yaml — a DRAFT, never auto-applied. You must
 review every proposed boundary in a PDF viewer, correct it, save as
 configs/splits.yaml, and set confirmed: true.
 
-Usage: uv run python -m src.detection.propose_splits
+Usage: uv run python -m src.detection.pose_splits
 """
 import json
 import re

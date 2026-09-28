@@ -1,3 +1,4 @@
+# Phase: normalized database model | Input: validated extraction data | Output: SQLAlchemy table mappings | Command: ``uv run python -m src.database.run_database --help``.
 from __future__ import annotations
 from datetime import date, datetime
 from typing import Any

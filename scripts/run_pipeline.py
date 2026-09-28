@@ -1,3 +1,4 @@
+# Phase: generic database extraction | Input: report text and local LLM service | Output: validated generic database records | Command: ``uv run python scripts/run_pipeline.py --dry-run``.
 """Zero-touch extraction pipeline: text -> LLM -> validated schema -> DB.
 
 Adding, removing, or modifying a field = editing pme/extraction_schema.py.

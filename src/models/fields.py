@@ -1,3 +1,4 @@
+# Phase: shared model contracts | Input: schema trees and field values | Output: flattened or nested field data | Command: ``uv run pytest tests/test_extraction_baseline.py -q``.
 """Pure helpers over the hierarchical field schema (v2).
 
 This module is the single runtime interface between the schema tree and the

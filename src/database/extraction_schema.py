@@ -1,3 +1,4 @@
+# Phase: generic database extraction | Input: report text schema | Output: validated Pydantic record shape | Command: ``uv run python scripts/run_pipeline.py --dry-run``.
 """THE schema — single source of truth for the generic pipeline.
 
 This one file drives everything downstream, and nothing else needs to

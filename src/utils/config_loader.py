@@ -1,3 +1,4 @@
+# Phase: shared utilities | Input: YAML configuration files | Output: validated singleton configuration | Command: ``uv run python src/validate_schema.py``.
 """Config loader: real singleton, strict Pydantic validation on ALL configs.
 
 Importing ANY src module validates every config file (fail-fast at import).

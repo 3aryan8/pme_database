@@ -1,3 +1,4 @@
+# Phase: annotation support | Input: source images/PDF pages | Output: contact-sheet images | Command: ``uv run python scripts/contact_sheet.py``.
 """Numbered thumbnail grids of every page, so you can mark person-start
 pages fast, then spot-check in a real PDF viewer.
 

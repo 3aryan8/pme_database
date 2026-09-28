@@ -1,3 +1,4 @@
+# Phase: database reporting | Input: report data structures | Output: generated HTML report | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
 import html

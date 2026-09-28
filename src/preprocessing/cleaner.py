@@ -1,3 +1,4 @@
+# Phase: preprocessing | Input: rendered page image | Output: cleaned image and quality flags | Command: ``uv run python -m src.preprocessing.run_preprocessing``.
 """Phase 4 cleaning: deskew -> dark-border trim -> CLAHE -> bilateral filter.
 
 Raw renders are NEVER modified (immutable); cleaned output goes to

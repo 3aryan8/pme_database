@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 run-pipeline = "src.run_pipeline:main"
+pme-pipeline = "pipelines.run_all:main"
 
 [build-system]
 requires = ["hatchling"]

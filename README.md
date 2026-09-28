@@ -52,9 +52,9 @@ src/database (validate+import)  validate → SQLite (data/pme.db) → report gen
 ### Run the whole thing, start to finish
 
 ```bash
-uv run python run_all.py              # all 5 stages (GPU needed for detect/extract)
-uv run python run_all.py --skip-gpu   # CPU stages only; validate+import run on existing extractions
-uv run python run_all.py --dry-run    # print the plan, run nothing
+uv run python -m pipelines.run_all              # all module stages (GPU needed for detect/extract)
+uv run python -m pipelines.run_all --skip-gpu   # CPU stages plus database import
+uv run python -m pipelines.run_all --dry-run    # print the central plan, run nothing
 ```
 
 ## Getting Started
@@ -80,7 +80,7 @@ appropriate pipeline command from the project root.
 
 ```bash
 # Run the complete workflow
-uv run python run_all.py
+uv run python -m pipelines.run_all
 
 # Run only merge, assembly, and preprocessing
 uv run python -m src.run_pipeline --phase all
@@ -96,12 +96,48 @@ uv run python scripts/validate_extractions.py \
 uv run python scripts/import_extractions.py \
         --directory data/processed/extractions
 
+# Run the canonical database module directly
+uv run python -m src.database.run_database \
+        --directory data/processed/extractions
+
 # Launch the local Streamlit dashboard
 uv run streamlit run frontend/app.py
 ```
 
-The dashboard reads from the database configured by the `data.database`
-package and displays searchable candidate records with their source images.
+### Canonical Module Runners
+
+Each processing module has one `run_<module>.py` entrypoint. The central
+cross-module orchestrator is `pipelines/run_all.py`.
+
+| Module | Runner | Input | Output |
+| --- | --- | --- | --- |
+| PDF merge | `python -m src.pdf_merge.run_pdf_merge` | configured raw PDFs | merged source PDF |
+| Assembly | `python -m src.assembly.run_assembly` | merged PDF and split map | rendered pages and manifest |
+| Preprocessing | `python -m src.preprocessing.run_preprocessing` | manifest and rendered pages | cleaned/VLM images and manifest |
+| Detection | `python -m src.detection.run_detection` | processed pages and region config | region JSON and overlays |
+| Extraction | `python -m src.extraction.run_extraction` | processed pages and schema | extraction records |
+| Database | `python -m src.database.run_database` | canonical `record.json` files | normalized database rows |
+| Ground truth | `python -m src.ground_truth.run_ground_truth` | GT JSON and extraction records | Gate 1 report |
+
+Run the complete sequence with:
+
+```bash
+uv run python -m pipelines.run_all --help
+uv run python -m pipelines.run_all --dry-run
+uv run python -m pipelines.run_all --with-ground-truth
+```
+
+Every Python source and test file begins with a phase, input, output, and
+individual command header. Run one test file with `uv run pytest
+tests/test_<name>.py -q`, or run the complete suite with:
+
+```bash
+uv run pytest tests/ -q
+```
+
+The dashboard reads from the database configured by the `src.database`
+package and displays searchable candidate records with their rendered report
+images.
 
 ## Configuration
 
@@ -185,7 +221,7 @@ Before assembly, the pipeline merges the configured raw PDFs into one batched so
 2. **Where input PDFs go:** `data/raw/` (filenames in the YAML resolve against this directory).
 3. **Where the merged PDF lands:** `data/merged/merged_source.pdf` — a **separate folder** from the raw inputs, so the merged file can never be picked up as an input on a later run (no recursive re-merging). Input PDFs are never modified or deleted. A **single** configured PDF is **copied byte-for-byte** into this folder (SHA preserved → document IDs stay stable, no re-encoding); several are merged in YAML order (new SHA → new document IDs). The merged file is the **only input the rest of the pipeline consumes** — `data/raw` is never read downstream.
 4. **How the pipeline uses it:** `src/run_pipeline.py` calls `merge_configured_pdfs()` and passes the result to assembly. `configs/splits.yaml` splits it **dynamically**: `pages_per_person` consecutive pages per person, person count = merged page count / `pages_per_person` — so the map stays correct when the merged PDF grows. Assembly refuses unconfirmed maps and page counts that are not a multiple of `pages_per_person` (no partial-person guessing).
-5. **Standalone:** `uv run python -m src.pdf_merge.run_merge`
+5. **Standalone:** `uv run python -m src.pdf_merge.run_pdf_merge`
 
 ## Report Images (verification)
 

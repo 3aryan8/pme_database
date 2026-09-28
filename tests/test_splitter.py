@@ -1,3 +1,7 @@
+"""Tests for person-page split validation.
+
+Phase: assembly. Input: split maps and PDF page counts. Output: validated person ranges and expected failures. Command: ``uv run pytest tests/test_splitter.py -q``.
+"""
 """Split-map (configs/splits.yaml) contract: dynamic equal splits + manual ranges."""
 from pathlib import Path
 

@@ -1,3 +1,4 @@
+# Phase: assembly preparation | Input: source PDF and reviewed person starts | Output: configs/splits.yaml | Command: ``uv run python scripts/make_splits.py``.
 """Build configs/splits.yaml from a list of person START pages.
 
 Usage:
