@@ -89,6 +89,15 @@ st.markdown(
     .empty-state { background: #fff; border: 1px dashed #b6d7cd; border-radius: 14px; padding: 1.5rem; color: var(--muted); text-align: center; }
     [data-testid="stSidebar"] { background: var(--deep); }
     [data-testid="stSidebar"] * { color: #e9faf5 !important; }
+    [data-testid="stSidebar"][aria-expanded="false"] {
+        width: 18rem !important;
+        min-width: 18rem !important;
+        flex: 0 0 18rem !important;
+        transform: translateX(0) !important;
+        visibility: visible !important;
+    }
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stExpandSidebarButton"] { display: none !important; }
     [data-testid="stSidebar"] .stRadio label { color: #c9e2db !important; }
     [data-testid="stTextInput"] label, [data-testid="stTextInput"] label p { color: var(--ink) !important; font-weight: 700; }
     [data-testid="stTextInput"] input { border-radius: 9px; border: 2px solid #159b86; background: #fbfffd; color: var(--ink) !important; caret-color: var(--teal); box-shadow: 0 0 0 2px rgba(21,155,134,.10); }
