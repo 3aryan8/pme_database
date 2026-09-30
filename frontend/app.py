@@ -16,17 +16,17 @@ REPO_DIR = Path(__file__).resolve().parents[1]
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
-from src.database.config import MAIN_PROJECT_ROOT
+from src.database.config import get_extraction_dir
 from src.database.database import get_session, init_db
 from src.database.importer import sync_extractions
 from src.database.models import Candidate
 from src.database.repository import (
     get_candidate_directory,
-    get_candidate_report_images,
     get_dashboard_stats,
     get_latest_examination_for_candidate,
     search_candidates,
 )
+from src.database.report_images import find_report_images
 
 
 LOGGER = logging.getLogger(__name__)
@@ -193,13 +193,11 @@ def show_candidate(candidate: Candidate) -> None:
                 "Candidate found, but original image is not available."
             )
         else:
-            report_images = get_candidate_report_images(session, candidate.id)
-            image_paths = [
-                MAIN_PROJECT_ROOT / image.image_path
-                if not Path(image.image_path).is_absolute()
-                else Path(image.image_path)
-                for image in report_images
-            ]
+            try:
+                report_pages = find_report_images(document_id)
+            except FileNotFoundError:
+                report_pages = []
+            image_paths = [path for _, path in report_pages]
             if image_paths:
                 image_columns = st.columns(
                     min(len(image_paths), 4)
@@ -312,10 +310,15 @@ def show_candidate(candidate: Candidate) -> None:
 @st.fragment(run_every="60s")
 def main() -> None:
     init_db()
+    extraction_dir = get_extraction_dir()
+    current_document_ids = {
+        path.parent.name
+        for path in extraction_dir.rglob("record.json")
+    }
     with get_session() as session:
         sync_extractions(session)
     with get_session() as session:
-        stats = get_dashboard_stats(session)
+        stats = get_dashboard_stats(session, current_document_ids)
 
     if "sync_message" not in st.session_state:
         st.session_state.sync_message = None
@@ -331,7 +334,7 @@ def main() -> None:
     metric_columns = st.columns(2)
     metric_data = (
         ("Total candidates", stats["candidates"]),
-        ("Medical examinations", stats["examinations"]),
+        ("Unique medical examinations", stats["examinations"]),
     )
     for column, (label, value) in zip(metric_columns, metric_data):
         with column:
@@ -340,6 +343,10 @@ def main() -> None:
                 f'<div class="metric-value">{value:,}</div></div>',
                 unsafe_allow_html=True,
             )
+    st.caption(
+        "Counts use the current extraction files; duplicate reports for the "
+        "same candidate and examination date count once."
+    )
 
     with st.sidebar:
         st.markdown("## ✚ PME Dashboard")
@@ -357,12 +364,19 @@ def main() -> None:
                         f"Sync failed: {error}",
                     )
                 else:
-                    st.session_state.sync_message = ("success", "Data synced")
+                    status = "success" if failed == 0 else "warning"
+                    st.session_state.sync_message = (
+                        status,
+                        f"Processed {imported} extraction records; "
+                        f"{failed} failed.",
+                    )
             st.rerun()
         if st.session_state.sync_message:
             message_type, message = st.session_state.sync_message
             if message_type == "success":
                 st.success(message)
+            elif message_type == "warning":
+                st.warning(message)
             else:
                 st.warning(message)
         st.divider()

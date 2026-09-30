@@ -100,8 +100,6 @@ uv run python scripts/import_extractions.py \
 uv run python -m src.database.run_database \
         --directory data/processed/extractions
 
-# Launch the local Streamlit dashboard
-uv run streamlit run frontend/app.py
 ```
 
 ### Canonical Module Runners
@@ -135,9 +133,36 @@ tests/test_<name>.py -q`, or run the complete suite with:
 uv run pytest tests/ -q
 ```
 
-The dashboard reads from the database configured by the `src.database`
-package and displays searchable candidate records with their rendered report
-images.
+## Streamlit Dashboard
+
+Start the dashboard from the project root:
+
+```bash
+uv run streamlit run frontend/app.py
+```
+
+The dashboard synchronizes extraction records at startup and every 60 seconds.
+Use **Sync extraction files** in the sidebar to request an immediate sync.
+Candidate and examination summary counts are scoped to the document IDs in the
+current extraction directory, rather than every historical row in the database.
+
+The **Unique medical examinations** count deduplicates records by candidate and
+medical-examination date. Multiple extraction documents for the same candidate
+and date count as one examination; examinations on different dates count
+separately. The dashboard's candidate search and record details are served from
+the normalized database.
+
+Default data locations and environment overrides:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `EXTRACTION_DIR` | `data/processed/extractions` | Canonical `record.json` files synced into the database |
+| `REPORT_IMAGES_DIR` | `data/interim/high_res` | Rendered report pages, organized by document ID |
+| `DATABASE_URL` | `sqlite:///data/pme.db` | Database used for candidate search and record details |
+
+Images are resolved from the current report-image directory when a candidate
+is viewed. Extractions without a roll number cannot be linked to a candidate;
+sync failures are reported in the sidebar.
 
 ## Configuration
 

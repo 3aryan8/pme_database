@@ -1,7 +1,7 @@
 # Phase: normalized database access | Input: SQLAlchemy session and query parameters | Output: candidates, examinations, and report data | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .models import (
@@ -18,6 +18,74 @@ from .models import (
     ReportImage,
     VisionExamination,
 )
+
+
+def get_candidate_directory(session: Session) -> list[Candidate]:
+    """Return candidates with the most recently imported records first."""
+    statement = select(Candidate).order_by(
+        Candidate.created_at.desc(),
+        Candidate.id.desc(),
+    )
+    return list(session.scalars(statement).all())
+
+
+def get_dashboard_stats(
+    session: Session,
+    document_ids: set[str] | None = None,
+) -> dict[str, int]:
+    """Return candidate and examination counts, optionally source-scoped."""
+    if document_ids is None:
+        candidates = session.scalar(
+            select(func.count()).select_from(Candidate)
+        )
+        examinations = session.scalar(
+            select(func.count()).select_from(MedicalExamination)
+        )
+    else:
+        candidates = session.scalar(
+            select(func.count(func.distinct(Candidate.id)))
+            .join(Candidate.examinations)
+            .join(MedicalExamination.extraction_runs)
+            .where(ExtractionRun.document_id.in_(document_ids))
+        )
+        current_examinations = (
+            select(
+                MedicalExamination.candidate_id,
+                MedicalExamination.medical_examination_date,
+            )
+            .join(MedicalExamination.extraction_runs)
+            .where(ExtractionRun.document_id.in_(document_ids))
+            .distinct()
+            .subquery()
+        )
+        examinations = session.scalar(
+            select(func.count()).select_from(current_examinations)
+        )
+    return {
+        "candidates": candidates or 0,
+        "examinations": examinations or 0,
+    }
+
+
+def search_candidates(
+    session: Session,
+    candidate_name: str,
+    father_name: str,
+    date_of_birth,
+) -> list[Candidate]:
+    """Find candidates by exact, case-insensitive identity fields."""
+    statement = (
+        select(Candidate)
+        .where(
+            func.lower(func.trim(Candidate.candidate_name))
+            == candidate_name.strip().casefold(),
+            func.lower(func.trim(Candidate.father_name))
+            == father_name.strip().casefold(),
+            Candidate.date_of_birth == date_of_birth,
+        )
+        .order_by(Candidate.id)
+    )
+    return list(session.scalars(statement).all())
 
 
 def get_candidate_by_roll_number(
