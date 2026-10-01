@@ -1,11 +1,14 @@
-from pathlib import Path
-import argparse
-from src.database.database import init_db, get_session
-from src.database.importer import import_directory
-p=argparse.ArgumentParser(); p.add_argument("--directory", type=Path, default=Path("data/processed/extractions")); a=p.parse_args()
-if not a.directory.exists(): print(f"Directory does not exist: {a.directory}"); raise SystemExit(1)
-init_db(); s=get_session()
-try: ok,bad=import_directory(s,a.directory)
-finally: s.close()
-print(f"\nProcessed: {ok}\nFailed: {bad}")
-raise SystemExit(1 if bad else 0)
+"""Compatibility wrapper for the database module runner.
+
+Phase: database import.
+Input: canonical extraction records and ``--directory``.
+Output: validated records imported into the normalized database.
+Command: ``uv run python scripts/import_extractions.py --directory data/processed/extractions``.
+"""
+import sys
+
+from src.database.run_database import main
+
+
+if __name__ == "__main__":
+	sys.exit(main())

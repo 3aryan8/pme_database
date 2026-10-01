@@ -1,3 +1,4 @@
+# Phase: database inspection | Input: candidate roll number and database | Output: candidate details and report images | Command: ``uv run python scripts/inspect_candidate.py <roll_number>``.
 from __future__ import annotations
 
 import sys

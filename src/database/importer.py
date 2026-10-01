@@ -1,3 +1,4 @@
+# Phase: normalized database import | Input: canonical record.json files | Output: relational database rows and report-image references | Command: ``uv run python -m src.database.run_database``.
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .config import MAIN_PROJECT_ROOT
+from .config import MAIN_PROJECT_ROOT, get_extraction_dir
 from .models import (
     Candidate,
     Declaration,
@@ -471,7 +472,7 @@ def import_directory(
     successful = 0
     failed = 0
 
-    for path in sorted(directory.rglob("*.json")):
+    for path in sorted(directory.rglob("record.json")):
         try:
             with session.begin_nested():
                 _, created = import_one(
@@ -502,3 +503,16 @@ def import_directory(
             )
 
     return successful, failed
+
+
+def sync_extractions(
+    session: Session,
+    directory: Path | None = None,
+) -> tuple[int, int]:
+    """Import every extraction currently available in the pipeline output."""
+    extraction_dir = directory or get_extraction_dir()
+    if not extraction_dir.exists():
+        raise FileNotFoundError(
+            f"Extraction directory does not exist: {extraction_dir}"
+        )
+    return import_directory(session, extraction_dir)

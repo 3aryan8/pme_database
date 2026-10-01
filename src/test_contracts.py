@@ -1,3 +1,4 @@
+# Phase: pipeline contracts | Input: generated manifest parquet and page images | Output: contract pass/fail status | Command: ``uv run python src/test_contracts.py``.
 """Gate 1 contract tests: pixel-dimension assertions against the manifest.
 
 - high_res_RAW_path is the fidelity reference (must match DPI math exactly).

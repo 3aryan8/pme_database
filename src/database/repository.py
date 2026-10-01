@@ -1,6 +1,7 @@
+# Phase: normalized database access | Input: SQLAlchemy session and query parameters | Output: candidates, examinations, and report data | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .models import (
@@ -13,9 +14,78 @@ from .models import (
     PhysicalExamination,
     PmeCase,
     PmeCaseMeasurement,
+    PmeVisionRow,
     ReportImage,
     VisionExamination,
 )
+
+
+def get_candidate_directory(session: Session) -> list[Candidate]:
+    """Return candidates with the most recently imported records first."""
+    statement = select(Candidate).order_by(
+        Candidate.created_at.desc(),
+        Candidate.id.desc(),
+    )
+    return list(session.scalars(statement).all())
+
+
+def get_dashboard_stats(
+    session: Session,
+    document_ids: set[str] | None = None,
+) -> dict[str, int]:
+    """Return candidate and examination counts, optionally source-scoped."""
+    if document_ids is None:
+        candidates = session.scalar(
+            select(func.count()).select_from(Candidate)
+        )
+        examinations = session.scalar(
+            select(func.count()).select_from(MedicalExamination)
+        )
+    else:
+        candidates = session.scalar(
+            select(func.count(func.distinct(Candidate.id)))
+            .join(Candidate.examinations)
+            .join(MedicalExamination.extraction_runs)
+            .where(ExtractionRun.document_id.in_(document_ids))
+        )
+        current_examinations = (
+            select(
+                MedicalExamination.candidate_id,
+                MedicalExamination.medical_examination_date,
+            )
+            .join(MedicalExamination.extraction_runs)
+            .where(ExtractionRun.document_id.in_(document_ids))
+            .distinct()
+            .subquery()
+        )
+        examinations = session.scalar(
+            select(func.count()).select_from(current_examinations)
+        )
+    return {
+        "candidates": candidates or 0,
+        "examinations": examinations or 0,
+    }
+
+
+def search_candidates(
+    session: Session,
+    candidate_name: str,
+    father_name: str,
+    date_of_birth,
+) -> list[Candidate]:
+    """Find candidates by exact, case-insensitive identity fields."""
+    statement = (
+        select(Candidate)
+        .where(
+            func.lower(func.trim(Candidate.candidate_name))
+            == candidate_name.strip().casefold(),
+            func.lower(func.trim(Candidate.father_name))
+            == father_name.strip().casefold(),
+            Candidate.date_of_birth == date_of_birth,
+        )
+        .order_by(Candidate.id)
+    )
+    return list(session.scalars(statement).all())
 
 
 def get_candidate_by_roll_number(
@@ -70,6 +140,11 @@ def get_examination_by_id(
                 PmeCase.measurements
             ),
             selectinload(
+                MedicalExamination.pme_case
+            ).selectinload(
+                PmeCase.vision_rows
+            ),
+            selectinload(
                 MedicalExamination.vision
             ),
             selectinload(
@@ -121,6 +196,11 @@ def get_latest_examination_for_candidate(
                 MedicalExamination.pme_case
             ).selectinload(
                 PmeCase.measurements
+            ),
+            selectinload(
+                MedicalExamination.pme_case
+            ).selectinload(
+                PmeCase.vision_rows
             ),
             selectinload(
                 MedicalExamination.vision
@@ -178,6 +258,11 @@ def get_examination_by_roll_number(
                 PmeCase.measurements
             ),
             selectinload(
+                MedicalExamination.pme_case
+            ).selectinload(
+                PmeCase.vision_rows
+            ),
+            selectinload(
                 MedicalExamination.vision
             ),
             selectinload(
@@ -216,7 +301,10 @@ def get_pme_case(
         .options(
             selectinload(
                 PmeCase.measurements
-            )
+            ),
+            selectinload(
+                PmeCase.vision_rows
+            ),
         )
     )
 
@@ -246,6 +334,20 @@ def get_pme_measurements(
     return list(
         session.scalars(statement).all()
     )
+
+
+def get_pme_vision_rows(
+    session: Session,
+    pme_case_id: int,
+) -> list[PmeVisionRow]:
+    """Fetch Page 2 side-by-side vision rows for a PME case."""
+    statement = (
+        select(PmeVisionRow)
+        .where(PmeVisionRow.pme_case_id == pme_case_id)
+        .order_by(PmeVisionRow.id)
+    )
+
+    return list(session.scalars(statement).all())
 
 
 def get_vision_examination(
@@ -401,6 +503,13 @@ def get_examination_by_document_id(
                 MedicalExamination.pme_case
             ).selectinload(
                 PmeCase.measurements
+            ),
+            selectinload(
+                ExtractionRun.examination
+            ).selectinload(
+                MedicalExamination.pme_case
+            ).selectinload(
+                PmeCase.vision_rows
             ),
             selectinload(
                 ExtractionRun.examination

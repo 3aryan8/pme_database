@@ -22,7 +22,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
 
-RUN uv sync
+RUN uv sync --extra vlm
 
 COPY . .
 

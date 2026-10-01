@@ -1,3 +1,7 @@
+"""Tests for report-image import, numbering, and retrieval.
+
+Phase: database import/report verification. Input: temporary rendered pages and extraction payloads. Output: isolated report-image rows and error handling. Command: ``uv run pytest tests/test_report_images.py -q``.
+"""
 """Tests for report image ingestion + retrieval (four pages per report).
 
 Covers: insertion with four images, correct candidate association,
@@ -12,10 +16,19 @@ from sqlalchemy.orm import sessionmaker
 
 from src.database.config import MAIN_PROJECT_ROOT
 from src.database.importer import import_one, to_stored_path
-from src.database.models import Base, Candidate, MedicalExamination, ReportImage
+from src.database.models import (
+    Base,
+    Candidate,
+    MedicalExamination,
+    PmeCase,
+    PmeVisionRow,
+    ReportImage,
+)
 from src.database.report_images import find_report_images
 from src.database.repository import (
     get_candidate_report_images,
+    get_latest_examination_for_candidate,
+    get_pme_vision_rows,
     get_report_images,
 )
 from src.database.schemas import PMEExtraction
@@ -72,6 +85,25 @@ def _counts(session):
         session.scalar(select(func.count()).select_from(MedicalExamination)),
         session.scalar(select(func.count()).select_from(ReportImage)),
     )
+
+
+def test_vision_rows_are_retrieved_from_canonical_relationship(session):
+    candidate = Candidate(roll_number="vision-row-candidate")
+    examination = MedicalExamination(candidate=candidate)
+    pme_case = PmeCase(examination=examination)
+    pme_case.vision_rows = [
+        PmeVisionRow(row_label="Distance", right_value="6/6", left_value="6/9"),
+    ]
+    session.add(examination)
+    session.commit()
+
+    rows = get_pme_vision_rows(session, pme_case.id)
+    assert [(row.row_label, row.right_value, row.left_value) for row in rows] == [
+        ("Distance", "6/6", "6/9"),
+    ]
+
+    loaded = get_latest_examination_for_candidate(session, candidate.id)
+    assert loaded.pme_case.vision_rows[0].row_label == "Distance"
 
 
 def test_candidate_inserted_with_four_images(session, monkeypatch, tmp_path):
@@ -224,3 +256,13 @@ def test_find_report_images_count_and_mismatch(tmp_path):
     # no rendered pages at all fails
     with pytest.raises(FileNotFoundError, match="no rendered"):
         find_report_images("doc_missing", base_dir=tmp_path, expected=4)
+
+
+def test_find_report_images_rejects_numbering_gaps(tmp_path):
+    document_dir = tmp_path / "doc_gap"
+    document_dir.mkdir()
+    (document_dir / "page_0000.png").write_bytes(b"fake-png")
+    (document_dir / "page_0002.png").write_bytes(b"fake-png")
+
+    with pytest.raises(FileNotFoundError, match="not contiguous"):
+        find_report_images("doc_gap", base_dir=tmp_path)

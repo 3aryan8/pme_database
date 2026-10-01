@@ -1,3 +1,4 @@
+# Phase: shared model contracts | Input: pipeline payloads | Output: validated Pydantic records | Command: ``uv run pytest tests/test_pme.py -q``.
 """Pydantic models for all data contracts.
 
 Invalid config or data = pipeline halts at load/insert time.

@@ -1,3 +1,7 @@
+"""Tests for preprocessing image cleaning.
+
+Phase: preprocessing. Input: temporary image fixtures. Output: validated cleaned images and flags. Command: ``uv run pytest tests/test_cleaner.py -q``.
+"""
 import cv2
 import numpy as np
 

@@ -1,3 +1,4 @@
+# Phase: ground-truth evaluation | Input: hand-typed ground truth and records | Output: accuracy tables and JSON report | Command: ``uv run python -m src.ground_truth.run_ground_truth``.
 """GATE 1 harness: per-field accuracy, error taxonomy, typed-vs-handwritten.
 
 Compares extractions against hand-typed ground truth:

@@ -1,3 +1,4 @@
+# Phase: assembly | Input: merged PDF page count and split map | Output: validated person ranges | Command: ``uv run python -m src.assembly.run_assembly``.
 """Loads and validates the person split map (configs/splits.yaml).
 
 Hard-refuses unconfirmed maps at assembly time (never split on a guess)

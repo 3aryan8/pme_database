@@ -1,3 +1,4 @@
+# Phase: detection | Input: page image and region predictions | Output: review overlay image | Command: ``uv run python -m src.detection.run_detection``.
 """Draw detection boxes on the page render — the human-review artifact."""
 from pathlib import Path
 

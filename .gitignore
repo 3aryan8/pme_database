@@ -60,3 +60,5 @@ htmlcov/
 # Logs
 *.log
 docker/*.log
+
+.db

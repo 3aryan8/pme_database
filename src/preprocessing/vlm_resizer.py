@@ -1,3 +1,4 @@
+# Phase: preprocessing | Input: cleaned or high-resolution image | Output: VLM-sized image | Command: ``uv run python -m src.preprocessing.run_preprocessing``.
 """Generates the downsampled VLM-input copies (the two-resolution rule)."""
 from PIL import Image
 

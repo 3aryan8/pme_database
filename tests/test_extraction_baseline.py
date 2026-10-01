@@ -1,3 +1,7 @@
+"""Regression tests for document and per-page extraction runners.
+
+Phase: extraction. Input: generated manifest rows and mocked VLM responses. Output: canonical records, sidecars, provenance, and conflict behavior. Command: ``uv run pytest tests/test_extraction_baseline.py -q``.
+"""
 """No GPU needed — these test the pure parts: prompt, parser, normalizer,
 scorer taxonomy (schema v2: hierarchical, page-structured), and the runner's
 document/per-page output layout (fake extractor, no model)."""

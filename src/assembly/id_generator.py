@@ -1,3 +1,4 @@
+# Phase: assembly | Input: source PDF hash and person index | Output: stable document ID | Command: ``uv run python -m src.assembly.run_assembly``.
 """Deterministic IDs.
 
 document_id (per-person) = sha256(f"{source_file_sha256}:person:{person_index}")

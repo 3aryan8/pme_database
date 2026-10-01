@@ -1,3 +1,7 @@
+"""Tests for manifest stability and deterministic identifiers.
+
+Phase: assembly contract. Input: temporary manifests and source metadata. Output: stable document IDs and manifest rows. Command: ``uv run pytest tests/test_manifest_stability.py -q``.
+"""
 """Smoke tests: config contracts. Phase 3 will add the ID-stability test here
 (regenerate manifest twice -> byte-identical document_ids)."""
 from src.utils.config_loader import config

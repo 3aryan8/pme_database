@@ -1,3 +1,4 @@
+# Phase: database configuration | Input: environment variables and project paths | Output: database and data directories | Command: ``uv run python -m src.database.run_database --help``.
 from __future__ import annotations
 
 import os

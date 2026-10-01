@@ -1,3 +1,7 @@
+"""Tests for configured PDF resolution and merging.
+
+Phase: PDF merge. Input: temporary PDF files and configuration overrides. Output: ordered merged PDFs and failure behavior. Command: ``uv run pytest tests/test_pdf_merge.py -q``.
+"""
 """Tests for the PDF merge step (configs/pdf_sources.yaml -> one source PDF)."""
 import hashlib
 from types import SimpleNamespace
@@ -6,7 +10,7 @@ import pymupdf as fitz
 import pytest
 
 from src.pdf_merge.merge import merge_pdfs
-from src.pdf_merge.run_merge import merge_configured_pdfs, resolve_configured_pdfs
+from src.pdf_merge.run_pdf_merge import merge_configured_pdfs, resolve_configured_pdfs
 from src.utils.config_loader import config
 
 

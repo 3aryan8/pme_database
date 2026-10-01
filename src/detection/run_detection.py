@@ -1,3 +1,4 @@
+# Phase: detection | Input: preprocessed manifest and page images | Output: region JSON and visualizations | Command: ``uv run python -m src.detection.run_detection``.
 """Batch VLM region detection over the manifest (Phase 6 prototype).
 
 Usage:

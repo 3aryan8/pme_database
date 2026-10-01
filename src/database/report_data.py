@@ -1,3 +1,4 @@
+# Phase: database reporting | Input: normalized database records | Output: report data structures | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field

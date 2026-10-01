@@ -52,12 +52,181 @@ src/database (validate+import)  validate → SQLite (data/pme.db) → report gen
 ### Run the whole thing, start to finish
 
 ```bash
-uv run python run_all.py              # all 5 stages (GPU needed for detect/extract)
-uv run python run_all.py --skip-gpu   # CPU stages only; validate+import run on existing extractions
-uv run python run_all.py --dry-run    # print the plan, run nothing
+uv run python -m pipelines.run_all              # all module stages (GPU needed for detect/extract)
+uv run python -m pipelines.run_all --skip-gpu   # CPU stages plus database import
+uv run python -m pipelines.run_all --dry-run    # print the central plan, run nothing
 ```
 
-Stages: `core` (merge → assembly → preprocess) → `detect` (GPU) → `extract` (GPU) → `validate` → `import` (extractions + 4 report images into the DB). Fail-fast: stops at the first failing stage.
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11 or newer
+- [`uv`](https://docs.astral.sh/uv/) for dependency and environment management
+- A local OpenAI-compatible LLM server for the generic extraction workflow
+- NVIDIA drivers and the NVIDIA Container Toolkit for VLM detection/extraction
+
+Install the project and development dependencies:
+
+```bash
+uv sync --dev
+```
+
+The pipeline expects input PDFs in `data/raw/`. Add their filenames to
+`configs/pdf_sources.yaml`, review `configs/splits.yaml`, and then run the
+appropriate pipeline command from the project root.
+
+### Useful Commands
+
+```bash
+# Run the complete workflow
+uv run python -m pipelines.run_all
+
+# Run only merge, assembly, and preprocessing
+uv run python -m src.run_pipeline --phase all
+
+# Run the test suite
+uv run pytest tests/ -v
+
+# Validate extraction files without importing them
+uv run python scripts/validate_extractions.py \
+        --directory data/processed/extractions
+
+# Import validated extractions into the database
+uv run python scripts/import_extractions.py \
+        --directory data/processed/extractions
+
+# Run the canonical database module directly
+uv run python -m src.database.run_database \
+        --directory data/processed/extractions
+
+```
+
+### Canonical Module Runners
+
+Each processing module has one `run_<module>.py` entrypoint. The central
+cross-module orchestrator is `pipelines/run_all.py`.
+
+| Module | Runner | Input | Output |
+| --- | --- | --- | --- |
+| PDF merge | `python -m src.pdf_merge.run_pdf_merge` | configured raw PDFs | merged source PDF |
+| Assembly | `python -m src.assembly.run_assembly` | merged PDF and split map | rendered pages and manifest |
+| Preprocessing | `python -m src.preprocessing.run_preprocessing` | manifest and rendered pages | cleaned/VLM images and manifest |
+| Detection | `python -m src.detection.run_detection` | processed pages and region config | region JSON and overlays |
+| Extraction | `python -m src.extraction.run_extraction` | processed pages and schema | extraction records |
+| Database | `python -m src.database.run_database` | canonical `record.json` files | normalized database rows |
+| Ground truth | `python -m src.ground_truth.run_ground_truth` | GT JSON and extraction records | Gate 1 report |
+
+Run the complete sequence with:
+
+```bash
+uv run python -m pipelines.run_all --help
+uv run python -m pipelines.run_all --dry-run
+uv run python -m pipelines.run_all --with-ground-truth
+```
+
+Every Python source and test file begins with a phase, input, output, and
+individual command header. Run one test file with `uv run pytest
+tests/test_<name>.py -q`, or run the complete suite with:
+
+```bash
+uv run pytest tests/ -q
+```
+
+## Streamlit Dashboard
+
+Start the dashboard from the project root:
+
+```bash
+uv run streamlit run frontend/app.py
+```
+
+The dashboard synchronizes extraction records at startup and every 60 seconds.
+Use **Sync extraction files** in the sidebar to request an immediate sync.
+Candidate and examination summary counts are scoped to the document IDs in the
+current extraction directory, rather than every historical row in the database.
+
+The **Unique medical examinations** count deduplicates records by candidate and
+medical-examination date. Multiple extraction documents for the same candidate
+and date count as one examination; examinations on different dates count
+separately. The dashboard's candidate search and record details are served from
+the normalized database.
+
+Default data locations and environment overrides:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `EXTRACTION_DIR` | `data/processed/extractions` | Canonical `record.json` files synced into the database |
+| `REPORT_IMAGES_DIR` | `data/interim/high_res` | Rendered report pages, organized by document ID |
+| `DATABASE_URL` | `sqlite:///data/pme.db` | Database used for candidate search and record details |
+
+Images are resolved from the current report-image directory when a candidate
+is viewed. Extractions without a roll number cannot be linked to a candidate;
+sync failures are reported in the sidebar.
+
+## Configuration
+
+Pipeline configuration is kept in `configs/`:
+
+| file | purpose |
+| --- | --- |
+| `pdf_sources.yaml` | ordered raw PDF inputs |
+| `splits.yaml` | pages per person and manual page ranges |
+| `pipeline.yaml` | stage and processing settings |
+| `regions.yaml` | detection region definitions |
+| `models.yaml` | model and inference settings |
+| `schema.yaml` | fields extracted by the VLM pipeline |
+| `schema.baseline.yaml` | baseline schema for comparison |
+| `holdout_ids.txt` | IDs reserved for evaluation |
+
+Database connection settings are read from environment variables by the
+database configuration module. The default local workflow uses SQLite; keep
+credentials and machine-specific settings in a local `.env` file rather than
+committing them.
+
+## Docker
+
+Build the development image and open a shell:
+
+```bash
+make build
+make shell
+```
+
+Run the test suite in the container:
+
+```bash
+make test
+```
+
+Verify NVIDIA GPU passthrough and run GPU-enabled commands with:
+
+```bash
+make verify-gpu
+make gpu CMD="python -m src.detection.run_detection"
+```
+
+The GPU compose override requires a native Docker daemon with the NVIDIA
+Container Toolkit. Label Studio is available at `http://localhost:8080` when
+the compose services are started.
+
+## Repository Layout
+
+```text
+configs/       versioned pipeline, model, split, and schema configuration
+data/          raw inputs, intermediate artifacts, ground truth, and reports
+frontend/      Streamlit candidate database dashboard
+scripts/       validation, import, reporting, and inspection utilities
+src/           pipeline stages and database implementation
+tests/         unit and integration tests
+docker/        CPU and GPU Docker Compose definitions
+```
+
+Generated files under `data/` can be removed with `make clean`. Raw PDFs,
+ground-truth annotations, configuration files, and other source material are
+not removed by that command.
+
+Stages: `core` (merge → assembly → preprocess) → `detect` (GPU) → `extract` (GPU) → `validate` → `import` (extractions + rendered report images into the DB). Fail-fast: stops at the first failing stage.
 
 ### CPU-only core pipeline
 
@@ -77,7 +246,7 @@ Before assembly, the pipeline merges the configured raw PDFs into one batched so
 2. **Where input PDFs go:** `data/raw/` (filenames in the YAML resolve against this directory).
 3. **Where the merged PDF lands:** `data/merged/merged_source.pdf` — a **separate folder** from the raw inputs, so the merged file can never be picked up as an input on a later run (no recursive re-merging). Input PDFs are never modified or deleted. A **single** configured PDF is **copied byte-for-byte** into this folder (SHA preserved → document IDs stay stable, no re-encoding); several are merged in YAML order (new SHA → new document IDs). The merged file is the **only input the rest of the pipeline consumes** — `data/raw` is never read downstream.
 4. **How the pipeline uses it:** `src/run_pipeline.py` calls `merge_configured_pdfs()` and passes the result to assembly. `configs/splits.yaml` splits it **dynamically**: `pages_per_person` consecutive pages per person, person count = merged page count / `pages_per_person` — so the map stays correct when the merged PDF grows. Assembly refuses unconfirmed maps and page counts that are not a multiple of `pages_per_person` (no partial-person guessing).
-5. **Standalone:** `uv run python -m src.pdf_merge.run_merge`
+5. **Standalone:** `uv run python -m src.pdf_merge.run_pdf_merge`
 
 ## Report Images (verification)
 

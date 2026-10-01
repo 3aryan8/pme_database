@@ -1,3 +1,4 @@
+# Phase: assembly | Input: merged source PDF and split configuration | Output: rendered pages and manifest | Command: ``uv run python -m src.assembly.run_assembly``.
 """Phase 3 entrypoint: split -> render -> manifest.
 
 Usage: uv run python -m src.assembly.run_assembly

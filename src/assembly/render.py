@@ -1,3 +1,4 @@
+# Phase: assembly | Input: PDF pages and render settings | Output: PNG pages and render metadata | Command: ``uv run python -m src.assembly.run_assembly``.
 """Renders source PDF pages to adaptive-DPI PNGs + estimates scan quality.
 
 Adaptive rendering rule (replaces the old fixed-300-DPI behavior):

@@ -1,3 +1,4 @@
+# Phase: extraction | Input: report page images and schema | Output: structured field payload and parse status | Command: ``uv run python -m src.extraction.run_extraction``.
 """Phase 5 baseline: full-page, schema-driven extraction (GATE 1 experiment).
 
 - ZERO-SHOT: no few-shot examples, no eval-leakage surface. When Phase 7

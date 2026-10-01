@@ -1,3 +1,4 @@
+# Phase: CPU core compatibility pipeline | Input: configured PDFs and split map | Output: merged, assembled, and preprocessed artifacts | Command: ``uv run python -m src.run_pipeline --phase all``.
 """Group 1 pipeline entrypoint: merge PDFs -> assembly -> preprocess."""
 import argparse
 
@@ -26,7 +27,7 @@ def main() -> None:
         return
 
     if args.phase in ("assembly", "all"):
-        from src.pdf_merge.run_merge import merge_configured_pdfs
+        from src.pdf_merge.run_pdf_merge import merge_configured_pdfs
         try:
             merged_pdf = merge_configured_pdfs()
         except (FileNotFoundError, ValueError) as exc:

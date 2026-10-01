@@ -1,13 +1,12 @@
+"""Tests for normalized PME extraction schema loading.
+
+Phase: database schema validation. Input: tracked JSON schema fixture. Output: validated candidate and declaration fields. Command: ``uv run pytest tests/test_pme.py -q``.
+"""
 from pathlib import Path
 from src.database.schemas import PMEExtraction
 
-# Sample extraction lives in the pipeline project's data/.
-SAMPLE = (
-    Path(__file__).resolve().parents[1]
-    / "data" / "processed" / "extractions"
-    / "231c1d5189f1bcd717ab880cca4d0682799911a892bb1974b230982c00721ce7"
-    / "record.json"
-)
+# Keep this schema fixture tracked and independent of ignored pipeline output.
+SAMPLE = Path(__file__).parent / "fixtures" / "sample_record.json"
 
 def test_sample_json():
     d=PMEExtraction.from_file(SAMPLE)

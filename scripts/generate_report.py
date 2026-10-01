@@ -1,3 +1,4 @@
+# Phase: database reporting | Input: normalized database and candidate selection | Output: HTML report | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
 import sys
