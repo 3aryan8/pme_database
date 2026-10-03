@@ -77,6 +77,8 @@ class DoctorIdentification(Timestamps, Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     stamp_detected: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
     signature_detected: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
+    signature_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    stamp_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     review_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 class MedicalExamination(Timestamps, Base):

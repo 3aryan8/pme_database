@@ -152,6 +152,31 @@ and date count as one examination; examinations on different dates count
 separately. The dashboard's candidate search and record details are served from
 the normalized database.
 
+### Dashboard searches
+
+- **Search candidate** finds a record by the exact combination of candidate
+        name, father's name, and date of birth. Selecting a match displays its
+        identity, medical examination, doctor, extracted data, and available report
+        page images.
+- **Doctor search** lets you choose a saved doctor and optionally filter by
+        **Medical class** and **Fit in class**. Each filter defaults to **All**. Use
+        **Search candidates** to list candidates matching the selected values.
+- Click an approved-candidate row to open that candidate's full record while
+        keeping the filtered list visible. Use **Hide candidate details** to close
+        the record view.
+- **Candidate directory** browses candidate records without an identity search.
+
+Doctor signature/stamp references are seeded from region detections with class
+`signature` or `stamp_seal`. For already-imported records, run
+`uv run python scripts/store_doctor_references.py` after region detection. A
+future record with no extracted doctor name can then be matched against stored
+references; signature-only records are supported when no stamp is available.
+
+Doctor names are stored in the normalized doctor master and populated when
+extraction records are synced. Doctor-name fields are extracted from report
+pages 3 and 4. Medical-class and fit-in-class dropdown choices use the saved
+extraction values, so OCR spelling variants may appear as separate options.
+
 Default data locations and environment overrides:
 
 | Setting | Default | Purpose |

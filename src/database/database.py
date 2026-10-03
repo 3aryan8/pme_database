@@ -82,6 +82,20 @@ def _ensure_sqlite_doctor_columns(target_engine=None) -> None:
         if "ix_doctors_full_name_english" not in names:
             connection.execute(text("CREATE INDEX ix_doctors_full_name_english ON doctors (full_name_english)"))
 
+        if inspector.has_table("doctor_identifications"):
+            identification_columns = {
+                column["name"]
+                for column in inspector.get_columns("doctor_identifications")
+            }
+            for column_name in ("signature_image_path", "stamp_image_path"):
+                if column_name not in identification_columns:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE doctor_identifications "
+                            f"ADD COLUMN {column_name} VARCHAR(500)"
+                        )
+                    )
+
 
 def init_db(target_engine=None):
     target = target_engine or engine

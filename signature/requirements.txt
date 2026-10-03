@@ -5,6 +5,7 @@ supervision==0.18.0
 opencv-python==4.8.1.78
 numpy==1.26.0
 Pillow==10.1.0
+easyocr>=1.7.1
 
 # Additional useful packages
 matplotlib==3.8.0

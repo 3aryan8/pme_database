@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from html import escape
 import os
 import sys
 from datetime import date, datetime
@@ -19,7 +20,12 @@ if str(REPO_DIR) not in sys.path:
 from src.database.config import get_extraction_dir
 from src.database.database import get_session, init_db
 from src.database.importer import sync_extractions
-from src.database.models import Candidate, Doctor
+from src.database.models import (
+    Candidate,
+    Doctor,
+    FitnessClassification,
+    MedicalExamination,
+)
 from src.database.repository import (
     get_candidate_directory,
     get_candidates_by_doctor,
@@ -112,6 +118,13 @@ st.markdown(
     [data-testid="stTextInput"] input:focus { border-color: #087563; box-shadow: 0 0 0 3px rgba(15,139,120,.24); }
     [data-testid="stFormSubmitButton"] button, [data-testid="stBaseButton-primary"] { background: var(--teal); border: 0; border-radius: 10px; font-weight: 700; }
     [data-testid="stFormSubmitButton"] button:hover, [data-testid="stBaseButton-primary"]:hover { background: #0b7465; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"] { background: #eaf7f2 !important; color: var(--deep) !important; border: 1px solid #0f8b78 !important; border-radius: 9px; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"] p { color: var(--deep) !important; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"]:hover { background: #d8f0e7 !important; border-color: #087563 !important; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"]:focus-visible { outline: 3px solid #7ce0b4; outline-offset: 2px; }
+    [data-testid="stMain"] .candidate-open-link { display: block; width: 100%; box-sizing: border-box; margin: .35rem 0; padding: .62rem .8rem; border: 1px solid #0f8b78; border-radius: 9px; background: #eaf7f2; color: #0d3b35 !important; text-align: center; text-decoration: none !important; font-weight: 600; }
+    [data-testid="stMain"] .candidate-open-link:hover { background: #d8f0e7; border-color: #087563; }
+    [data-testid="stMain"] .candidate-open-link:focus-visible { outline: 3px solid #7ce0b4; outline-offset: 2px; }
     [data-testid="stDownloadButton"] button { background: var(--teal) !important; color: #ffffff !important; border: 1px solid #087563 !important; border-radius: 10px; font-weight: 700; }
     [data-testid="stDownloadButton"] button p { color: #ffffff !important; }
     [data-testid="stDownloadButton"] button:hover { background: #0b7465 !important; border-color: #075f51 !important; }
@@ -268,15 +281,12 @@ def show_candidate(candidate: Candidate) -> None:
                 if doctor and doctor.full_name_english
                 else doctor.doctor_name if doctor else None
             )
-            doctor_designation = doctor.designation if doctor else None
-            if doctor_name or doctor_designation:
+            if doctor_name:
                 st.markdown(
-                    f'<div class="doctor-highlight"><div class="doctor-name"><strong>Doctor:</strong> {display(doctor_name) if doctor_name else "Not available"}</div>'
-                    f'<div class="doctor-meta">Designation: {display(doctor_designation) if doctor_designation else "Not available"}</div></div>',
+                    f'<div class="doctor-highlight"><div class="doctor-name"><strong>Doctor:</strong> {display(doctor_name)}</div></div>',
                     unsafe_allow_html=True,
                 )
             kv("Doctor", doctor_name)
-            kv("Doctor designation", doctor_designation)
             st.markdown("</div>", unsafe_allow_html=True)
 
         pme, vision = st.columns(2)
@@ -357,6 +367,32 @@ def main() -> None:
 
     if "sync_message" not in st.session_state:
         st.session_state.sync_message = None
+
+    if hasattr(st, "query_params"):
+        query_params = st.query_params
+        candidate_id_param = query_params.get("candidate_id")
+    else:
+        query_params = st.experimental_get_query_params()
+        candidate_id_param = query_params.get("candidate_id", [None])[0]
+    if candidate_id_param is not None:
+        if not candidate_id_param.isdigit():
+            st.error("The candidate link is invalid.")
+            return
+
+        candidate_id = int(candidate_id_param)
+        with get_session() as session:
+            candidate = session.get(Candidate, candidate_id)
+
+        if candidate is None:
+            st.error("This candidate record could not be found.")
+            return
+
+        st.markdown(
+            '<div class="record-heading"><h3>Candidate information</h3></div>',
+            unsafe_allow_html=True,
+        )
+        show_candidate(candidate)
+        return
 
     st.markdown(
         '<div class="hero"><div class="eyebrow">PME records · clinical data workspace</div>'
@@ -501,6 +537,20 @@ def main() -> None:
         )
         with get_session() as session:
             doctors = get_doctor_directory(session)
+            medical_classes = session.scalars(
+                select(MedicalExamination.medical_class)
+                .where(MedicalExamination.medical_class.is_not(None))
+                .distinct()
+                .order_by(MedicalExamination.medical_class)
+            ).all()
+            fit_in_class_values = session.scalars(
+                select(FitnessClassification.fit_in_class)
+                .where(FitnessClassification.fit_in_class.is_not(None))
+                .distinct()
+                .order_by(FitnessClassification.fit_in_class)
+            ).all()
+        medical_classes = [value for value in medical_classes if value.strip()]
+        fit_in_class_values = [value for value in fit_in_class_values if value.strip()]
 
         doctor_by_label = {}
         for doctor in doctors:
@@ -509,35 +559,80 @@ def main() -> None:
         options = list(doctor_by_label)
 
         with st.form("doctor-search", clear_on_submit=False):
-            if options:
-                selected_doctor_label = st.selectbox(
-                    "Doctor name *",
-                    options=options,
-                    index=0,
-                    help="Pick a doctor from the saved master list. All candidate records linked to that doctor will appear below.",
+            doctor_column, medical_column, fit_column = st.columns(3)
+            with doctor_column:
+                if options:
+                    selected_doctor_label = st.selectbox(
+                        "Doctor name *",
+                        options=options,
+                        index=0,
+                        help="Choose the saved doctor to filter candidates.",
+                    )
+                else:
+                    st.info("No doctors are saved yet. Run the extraction/import pipeline to populate the doctor master list.")
+                    selected_doctor_label = None
+            with medical_column:
+                selected_medical_class = st.selectbox(
+                    "Medical class",
+                    options=["All", *medical_classes],
                 )
-            else:
-                st.info("No doctors are saved yet. Run the extraction/import pipeline to populate the doctor master list.")
-                selected_doctor_label = None
-            submitted = st.form_submit_button("Search doctor", type="primary", use_container_width=True)
+            with fit_column:
+                selected_fit_in_class = st.selectbox(
+                    "Fit in class",
+                    options=["All", *fit_in_class_values],
+                )
+            submitted = st.form_submit_button("Search candidates", type="primary", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
+        st.session_state.setdefault("doctor_search_candidate_ids", [])
+        st.session_state.setdefault("doctor_search_doctor_id", None)
+
         if submitted:
+            st.session_state.doctor_search_candidate_ids = []
+            st.session_state.doctor_search_doctor_id = None
             if not selected_doctor_label:
                 st.warning("No doctor is available in the saved master list.")
             else:
                 doctor = doctor_by_label[selected_doctor_label]
                 with get_session() as session:
-                    candidates = get_candidates_by_doctor(session, doctor.id)
+                    candidates = get_candidates_by_doctor(
+                        session,
+                        doctor.id,
+                        medical_class=(
+                            selected_medical_class
+                            if selected_medical_class != "All"
+                            else None
+                        ),
+                        fit_in_class=(
+                            selected_fit_in_class
+                            if selected_fit_in_class != "All"
+                            else None
+                        ),
+                    )
+                st.session_state.doctor_search_candidate_ids = [
+                    candidate.id for candidate in candidates
+                ]
+                st.session_state.doctor_search_doctor_id = doctor.id
 
+        candidate_ids = st.session_state.doctor_search_candidate_ids
+        doctor_id = st.session_state.doctor_search_doctor_id
+        if doctor_id is not None:
+            with get_session() as session:
+                doctor = session.get(Doctor, doctor_id)
+                candidates = list(
+                    session.scalars(
+                        select(Candidate).where(Candidate.id.in_(candidate_ids))
+                    ).all()
+                ) if candidate_ids else []
+            candidates.sort(key=lambda candidate: candidate_ids.index(candidate.id))
+
+            if doctor:
                 st.markdown(
-                    f'<div class="result-banner"><strong>{doctor.full_name_english or doctor.doctor_name or "Unknown doctor"}</strong> · {doctor.designation or "No designation"}</div>',
+                    f'<div class="result-banner"><strong>{doctor.full_name_english or doctor.doctor_name or "Unknown doctor"}</strong></div>',
                     unsafe_allow_html=True,
                 )
                 st.markdown('<div class="detail-card"><h4>Doctor details</h4>', unsafe_allow_html=True)
                 kv("Doctor (English)", doctor.full_name_english or doctor.doctor_name)
-                kv("Hindi name", doctor.full_name_hindi)
-                kv("Designation", doctor.designation)
                 kv("Total approved candidates", len(candidates), important=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -547,10 +642,33 @@ def main() -> None:
                         f'<span class="record-count">{len(candidates)} record(s)</span></div>',
                         unsafe_allow_html=True,
                     )
+                    st.dataframe(
+                        [{
+                            "Candidate name": candidate.candidate_name or "Not available",
+                            "Father's name": candidate.father_name or "Not available",
+                            "Date of birth": candidate.date_of_birth,
+                            "Roll number": candidate.roll_number,
+                            "Recruitment CEN": candidate.recruitment_cen or "Not available",
+                        } for candidate in candidates],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
                     for candidate in candidates:
-                        st.write(f"- {candidate.candidate_name or 'Unnamed candidate'} ({candidate.roll_number})")
+                        candidate_label = (
+                            f"{candidate.candidate_name or 'Unnamed candidate'} "
+                            f"({candidate.roll_number})"
+                        )
+                        candidate_url = (
+                            f"?candidate_id={candidate.id}&doctor_id={doctor.id}"
+                        )
+                        st.markdown(
+                            f'<a class="candidate-open-link" href="{candidate_url}" '
+                            f'target="_blank" rel="noopener noreferrer">'
+                            f"{escape(candidate_label)}</a>",
+                            unsafe_allow_html=True,
+                        )
                 else:
-                    st.caption("This doctor is present in the master list but has no approved candidate records yet.")
+                    st.caption("No approved candidates match these filters.")
 
                 st.divider()
     else:

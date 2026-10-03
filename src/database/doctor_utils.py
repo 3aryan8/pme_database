@@ -18,6 +18,13 @@ _DESIGNATION_TOKENS = {
     "UROLOGIST",
 }
 
+_DOCTOR_NAME_ALIASES = {
+    "DR. A. ROBIN I": "DR. A. ROBIN",
+    "DR. PARAG ADHIYAPAK": "DR. PARAG ADHYAPAK",
+    "DR. PARAG ADHYAPAK BRG": "DR. PARAG ADHYAPAK",
+    "DR. PARAG ADHYAPAK S.": "DR. PARAG ADHYAPAK",
+}
+
 
 def normalize_doctor_name(raw_name: str | None) -> str:
     """Normalize the doctor name while keeping the designation separate."""
@@ -46,10 +53,13 @@ def normalize_doctor_name(raw_name: str | None) -> str:
     if text.upper().startswith("DR."):
         remainder = text[3:].strip()
         if remainder:
-            return "DR. " + re.sub(r"\s+", " ", remainder).upper()
-        return "DR."
+            normalized = "DR. " + re.sub(r"\s+", " ", remainder).upper()
+        else:
+            normalized = "DR."
+    else:
+        normalized = re.sub(r"\s+", " ", text).upper()
 
-    return re.sub(r"\s+", " ", text).upper()
+    return _DOCTOR_NAME_ALIASES.get(normalized, normalized)
 
 
 def doctor_lookup_key(raw_name: str | None) -> str:

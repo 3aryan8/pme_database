@@ -1,7 +1,7 @@
 # Phase: normalized database access | Input: SQLAlchemy session and query parameters | Output: candidates, examinations, and report data | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
@@ -502,12 +502,37 @@ def search_doctors(
 def get_candidates_by_doctor(
     session: Session,
     doctor_id: int,
+    medical_class: str | None = None,
+    fit_in_class: str | None = None,
 ) -> list[Candidate]:
-    """Return all candidates linked to a doctor."""
-    statement = (
-        select(Candidate)
-        .where(Candidate.doctor_id == doctor_id)
-        .order_by(Candidate.candidate_name.asc().nullslast(), Candidate.id.asc())
+    """Return candidates for a doctor, optionally filtered by exam outcomes."""
+    statement = select(Candidate)
+    if medical_class is None and fit_in_class is None:
+        statement = statement.where(
+            or_(
+                Candidate.doctor_id == doctor_id,
+                Candidate.examinations.any(
+                    MedicalExamination.examining_doctor_id == doctor_id
+                ),
+            )
+        )
+    else:
+        statement = statement.join(Candidate.examinations).where(
+            or_(
+                Candidate.doctor_id == doctor_id,
+                MedicalExamination.examining_doctor_id == doctor_id,
+            )
+        )
+        if medical_class is not None:
+            statement = statement.where(MedicalExamination.medical_class == medical_class)
+        if fit_in_class is not None:
+            statement = statement.join(MedicalExamination.fitness).where(
+                FitnessClassification.fit_in_class == fit_in_class
+            )
+        statement = statement.distinct()
+
+    statement = statement.order_by(
+        Candidate.candidate_name.asc().nullslast(), Candidate.id.asc()
     )
     return list(session.scalars(statement).all())
 

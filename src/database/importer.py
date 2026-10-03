@@ -3,15 +3,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .config import MAIN_PROJECT_ROOT, get_extraction_dir
+from .doctor_assets import identify_doctor_from_document, save_detected_doctor_assets
 from .doctor_utils import normalize_doctor_name
 from .models import (
     Candidate,
     Declaration,
     Doctor,
+    DoctorIdentification,
     ExtractionRun,
     FitnessClassification,
     MedicalExamination,
@@ -419,6 +421,7 @@ def import_one(session: Session, data: PMEExtraction):
         or page4.doctor_name
     )
 
+    doctor = None
     if doctor_name:
         normalized_name = normalize_doctor_name(doctor_name)
         doctor = session.scalar(
@@ -437,9 +440,18 @@ def import_one(session: Session, data: PMEExtraction):
 
             session.add(doctor)
             session.flush()
+    else:
+        doctor, _ = identify_doctor_from_document(session, data.document_id)
 
+    if doctor:
         examination.examining_doctor = doctor
         candidate.doctor_id = doctor.id
+        save_detected_doctor_assets(
+            session,
+            doctor,
+            candidate,
+            data.document_id,
+        )
 
     # ---------------------------------------------------------
     # Extraction run
@@ -508,6 +520,62 @@ def import_directory(
     return successful, failed
 
 
+def merge_doctor_aliases(session: Session) -> int:
+    """Merge known OCR name aliases and preserve all doctor foreign keys."""
+    grouped: dict[str, list[Doctor]] = {}
+    for doctor in session.scalars(select(Doctor).order_by(Doctor.id)).all():
+        canonical_name = normalize_doctor_name(
+            doctor.full_name_english or doctor.doctor_name
+        )
+        if canonical_name:
+            grouped.setdefault(canonical_name, []).append(doctor)
+
+    merged = 0
+    for canonical_name, doctors in grouped.items():
+        primary = min(
+            doctors,
+            key=lambda doctor: (
+                doctor.full_name_english != canonical_name,
+                doctor.id,
+            ),
+        )
+        for duplicate in doctors:
+            if duplicate.id == primary.id:
+                continue
+
+            for model, column in (
+                (Candidate, Candidate.doctor_id),
+                (MedicalExamination, MedicalExamination.examining_doctor_id),
+                (DoctorIdentification, DoctorIdentification.doctor_id),
+            ):
+                session.execute(
+                    update(model)
+                    .where(column == duplicate.id)
+                    .values({column.key: primary.id})
+                )
+
+            for field in (
+                "full_name_hindi",
+                "designation",
+                "doctor_role",
+                "signature_image_path",
+                "stamp_image_path",
+                "signature_hash",
+                "stamp_hash",
+            ):
+                if getattr(primary, field) is None:
+                    setattr(primary, field, getattr(duplicate, field))
+            session.delete(duplicate)
+            merged += 1
+
+        session.flush()
+        primary.full_name_english = canonical_name
+        primary.doctor_name = canonical_name
+
+    session.flush()
+    return merged
+
+
 def sync_extractions(
     session: Session,
     directory: Path | None = None,
@@ -518,4 +586,7 @@ def sync_extractions(
         raise FileNotFoundError(
             f"Extraction directory does not exist: {extraction_dir}"
         )
-    return import_directory(session, extraction_dir)
+    result = import_directory(session, extraction_dir)
+    merge_doctor_aliases(session)
+    session.commit()
+    return result
