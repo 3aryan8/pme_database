@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
+from .database import _ensure_sqlite_doctor_columns
 from .models import (
     Candidate,
     Declaration,
@@ -18,6 +20,7 @@ from .models import (
     ReportImage,
     VisionExamination,
 )
+from .doctor_utils import normalize_doctor_name
 
 
 def get_candidate_directory(session: Session) -> list[Candidate]:
@@ -65,6 +68,19 @@ def get_dashboard_stats(
         "candidates": candidates or 0,
         "examinations": examinations or 0,
     }
+
+
+def get_doctor_directory(session: Session) -> list[Doctor]:
+    """Return every saved doctor in the master table, ordered for the UI dropdown."""
+    statement = (
+        select(Doctor)
+        .order_by(
+            Doctor.full_name_english.asc().nullslast(),
+            Doctor.doctor_name.asc().nullslast(),
+            Doctor.id.asc(),
+        )
+    )
+    return list(session.scalars(statement).all())
 
 
 def search_candidates(
@@ -444,6 +460,56 @@ def get_doctor(
         Doctor,
         doctor_id,
     )
+
+
+def search_doctors(
+    session: Session,
+    query: str,
+) -> list[Doctor]:
+    """Search by English name, Hindi name, or designation."""
+    if not query or not query.strip():
+        return []
+
+    needle = normalize_doctor_name(query)
+    token = f"%{needle.casefold()}%"
+    statement = (
+        select(Doctor)
+        .where(
+            (func.lower(func.coalesce(Doctor.full_name_english, ""))
+             .like(token))
+            | (func.lower(func.coalesce(Doctor.full_name_hindi, ""))
+               .like(f"%{query.strip().casefold()}%"))
+            | (func.lower(func.coalesce(Doctor.designation, ""))
+               .like(f"%{query.strip().casefold()}%"))
+        )
+        .order_by(Doctor.full_name_english.asc().nullslast())
+    )
+    try:
+        return list(session.scalars(statement).all())
+    except OperationalError as exc:
+        error_text = str(exc)
+        if "no such column" not in error_text or "doctors." not in error_text:
+            raise
+
+        session.rollback()
+        bind = session.bind
+        if bind is not None:
+            _ensure_sqlite_doctor_columns(bind)
+        session.expire_all()
+        return list(session.scalars(statement).all())
+
+
+def get_candidates_by_doctor(
+    session: Session,
+    doctor_id: int,
+) -> list[Candidate]:
+    """Return all candidates linked to a doctor."""
+    statement = (
+        select(Candidate)
+        .where(Candidate.doctor_id == doctor_id)
+        .order_by(Candidate.candidate_name.asc().nullslast(), Candidate.id.asc())
+    )
+    return list(session.scalars(statement).all())
 
 
 def get_extraction_runs(

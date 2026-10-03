@@ -19,12 +19,15 @@ if str(REPO_DIR) not in sys.path:
 from src.database.config import get_extraction_dir
 from src.database.database import get_session, init_db
 from src.database.importer import sync_extractions
-from src.database.models import Candidate
+from src.database.models import Candidate, Doctor
 from src.database.repository import (
     get_candidate_directory,
+    get_candidates_by_doctor,
     get_dashboard_stats,
+    get_doctor_directory,
     get_latest_examination_for_candidate,
     search_candidates,
+    search_doctors,
 )
 from src.database.report_images import find_report_images
 
@@ -79,6 +82,10 @@ st.markdown(
     .kv-important { margin: .3rem -.35rem; padding: .72rem .65rem; border: 1px solid #8ed2bf; border-left: 4px solid #0f8b78; border-radius: 9px; background: #e7f8f1; }
     .kv-important span:first-child { color: #087563; font-weight: 800; }
     .kv-important span:last-child { color: #075f51; font-size: 1rem; font-weight: 800; }
+    .doctor-highlight { margin: .5rem 0 .9rem; padding: .8rem .9rem; border: 1px solid #f4c96f; border-left: 5px solid #d98100; border-radius: 12px; background: linear-gradient(90deg, #fffaf0 0%, #fffdf8 100%); color: #2a2107; }
+    .doctor-highlight strong { color: #915d00; }
+    .doctor-highlight .doctor-name { font-size: 1rem; font-weight: 800; color: #2a2107; }
+    .doctor-highlight .doctor-meta { color: #5f4f2c; font-size: .82rem; }
     .result-banner { background: #e9f8f2; border: 1px solid #bde6d8; color: #126b5a; padding: 1rem 1.1rem; border-radius: 12px; margin: .9rem 0 1rem; }
     .subtle-note { color: var(--muted); font-size: .82rem; margin: -.2rem 0 .55rem; }
     .required-note { display: flex; align-items: center; gap: .55rem; background: #fff7e6; border: 1px solid #f0c36b; color: #7b4b00; border-radius: 10px; padding: .5rem .7rem; margin: .15rem 0 .65rem; font-weight: 700; font-size: .8rem; }
@@ -250,7 +257,26 @@ def show_candidate(candidate: Candidate) -> None:
             kv("Medical class", examination.medical_class, important=True)
             kv("Identification marks", examination.identification_marks)
             kv("Declaration date", examination.candidate_declaration_date)
-            kv("Doctor", examination.examining_doctor.doctor_name if examination.examining_doctor else None)
+            doctor = examination.examining_doctor
+            if doctor is None:
+                candidate_doctor_id = session.scalar(
+                    select(Candidate.doctor_id).where(Candidate.id == candidate.id)
+                )
+                doctor = session.get(Doctor, candidate_doctor_id) if candidate_doctor_id else None
+            doctor_name = (
+                doctor.full_name_english
+                if doctor and doctor.full_name_english
+                else doctor.doctor_name if doctor else None
+            )
+            doctor_designation = doctor.designation if doctor else None
+            if doctor_name or doctor_designation:
+                st.markdown(
+                    f'<div class="doctor-highlight"><div class="doctor-name"><strong>Doctor:</strong> {display(doctor_name) if doctor_name else "Not available"}</div>'
+                    f'<div class="doctor-meta">Designation: {display(doctor_designation) if doctor_designation else "Not available"}</div></div>',
+                    unsafe_allow_html=True,
+                )
+            kv("Doctor", doctor_name)
+            kv("Doctor designation", doctor_designation)
             st.markdown("</div>", unsafe_allow_html=True)
 
         pme, vision = st.columns(2)
@@ -360,7 +386,7 @@ def main() -> None:
     with st.sidebar:
         st.markdown("## ✚ PME Dashboard")
         st.caption("Connected directly to the existing database")
-        page = st.radio("Navigate", ["Search candidate", "Candidate directory"])
+        page = st.radio("Navigate", ["Search candidate", "Doctor search", "Candidate directory"])
         if st.button("Sync extraction files", use_container_width=True):
             with st.spinner("Fetching and syncing extraction files..."):
                 try:
@@ -466,6 +492,67 @@ def main() -> None:
                 'Check the spelling of the name, father’s name, and DOB, then try again.</div>',
                 unsafe_allow_html=True,
             )
+    elif page == "Doctor search":
+        st.markdown(
+            '<div class="panel search-panel"><div class="section-kicker">Doctor lookup</div>'
+            '<div class="section-title">Doctor master</div>'
+            '<div class="subtle-note">Choose a saved doctor from the dropdown to view all approved candidates linked to that doctor.</div>',
+            unsafe_allow_html=True,
+        )
+        with get_session() as session:
+            doctors = get_doctor_directory(session)
+
+        doctor_by_label = {}
+        for doctor in doctors:
+            label = doctor.full_name_english or doctor.doctor_name or f"Doctor {doctor.id}"
+            doctor_by_label.setdefault(label, doctor)
+        options = list(doctor_by_label)
+
+        with st.form("doctor-search", clear_on_submit=False):
+            if options:
+                selected_doctor_label = st.selectbox(
+                    "Doctor name *",
+                    options=options,
+                    index=0,
+                    help="Pick a doctor from the saved master list. All candidate records linked to that doctor will appear below.",
+                )
+            else:
+                st.info("No doctors are saved yet. Run the extraction/import pipeline to populate the doctor master list.")
+                selected_doctor_label = None
+            submitted = st.form_submit_button("Search doctor", type="primary", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if submitted:
+            if not selected_doctor_label:
+                st.warning("No doctor is available in the saved master list.")
+            else:
+                doctor = doctor_by_label[selected_doctor_label]
+                with get_session() as session:
+                    candidates = get_candidates_by_doctor(session, doctor.id)
+
+                st.markdown(
+                    f'<div class="result-banner"><strong>{doctor.full_name_english or doctor.doctor_name or "Unknown doctor"}</strong> · {doctor.designation or "No designation"}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown('<div class="detail-card"><h4>Doctor details</h4>', unsafe_allow_html=True)
+                kv("Doctor (English)", doctor.full_name_english or doctor.doctor_name)
+                kv("Hindi name", doctor.full_name_hindi)
+                kv("Designation", doctor.designation)
+                kv("Total approved candidates", len(candidates), important=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                if candidates:
+                    st.markdown(
+                        f'<div class="record-heading"><h3>Approved candidates</h3>'
+                        f'<span class="record-count">{len(candidates)} record(s)</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                    for candidate in candidates:
+                        st.write(f"- {candidate.candidate_name or 'Unnamed candidate'} ({candidate.roll_number})")
+                else:
+                    st.caption("This doctor is present in the master list but has no approved candidate records yet.")
+
+                st.divider()
     else:
         st.markdown(
             '<div class="panel"><div class="section-kicker">Records</div>'

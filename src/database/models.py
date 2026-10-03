@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
-from sqlalchemy import Date, DateTime, ForeignKey, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase): pass
@@ -30,18 +30,54 @@ class Candidate(Timestamps, Base):
     email: Mapped[str | None] = mapped_column(String(255))
 
     recruitment_cen: Mapped[str | None] = mapped_column(String(50))
+    doctor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("doctors.id"),
+        nullable=True,
+        index=True,
+    )
+
+    doctor: Mapped["Doctor | None"] = relationship(back_populates="candidates")
 
     examinations: Mapped[list["MedicalExamination"]] = relationship(
         back_populates="candidate",
         cascade="all, delete-orphan",
     )
 
-class Doctor(Base):
+class Doctor(Timestamps, Base):
     __tablename__ = "doctors"
     id: Mapped[int] = mapped_column(primary_key=True)
-    doctor_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    doctor_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    full_name_hindi: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    full_name_english: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    designation: Mapped[str | None] = mapped_column(String(200), nullable=True)
     doctor_role: Mapped[str|None] = mapped_column(String(100))
+    signature_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    stamp_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    signature_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    stamp_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    candidates: Mapped[list[Candidate]] = relationship(back_populates="doctor")
     examinations: Mapped[list["MedicalExamination"]] = relationship(back_populates="examining_doctor")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "full_name_english",
+            "designation",
+            name="uq_doctor_name_designation",
+        ),
+    )
+
+class DoctorIdentification(Timestamps, Base):
+    __tablename__ = "doctor_identifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"), nullable=False, index=True)
+    doctor_id: Mapped[int] = mapped_column(ForeignKey("doctors.id"), nullable=False, index=True)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    identification_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stamp_detected: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
+    signature_detected: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
+    review_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 class MedicalExamination(Timestamps, Base):
     __tablename__ = "medical_examinations"

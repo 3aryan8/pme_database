@@ -26,7 +26,7 @@ from src.utils.logger import setup_logger
 log = setup_logger("extraction")
 
 MERGE_FACTOR = 28                 # Qwen2.5-VL: patch 14 x merge 2
-DEFAULT_LONG_EDGE_HIRES = 2688    # ~300 DPI page long edge, 28-multiple
+DEFAULT_LONG_EDGE_HIRES = 1536    # Lower default to keep 4-page document mode within GPU memory limits.
 
 
 def _pin_size(img: Image.Image, long_edge: int) -> Image.Image:
@@ -199,34 +199,56 @@ class VlmSchemaExtractor:
                      page: Optional[int] = None) -> tuple:
         """Returns (nested shaped fields dict, parse_ok).
         `page` (1-based, doc-relative) selects the page-specific prompt."""
-        with Image.open(image_path) as im:
-            img = _pin_size(im.convert("RGB"), long_edge)
-        t0 = time.time()
-        prompt = build_extraction_prompt(self.schema, page)
-        # 2048: the v2 per-page JSON (incl. page-4 table rows) exceeds the
-        # old 800 budget and would be truncated -> guaranteed parse failure.
-        raw = self._ask([img], prompt, max_new_tokens=2048)
-        fields, ok = parse_extraction_output(raw, self.schema)
-        log.info("%s (page %s): parse_ok=%s, %d non-null, %.1fs",
-                 image_path.name, page, ok,
-                 count_non_null(fields, self.schema.fields),
-                 time.time() - t0)
-        return fields, ok
+        for attempt_long_edge in [long_edge, max(1024, long_edge // 2), 1024, 768]:
+            try:
+                with Image.open(image_path) as im:
+                    img = _pin_size(im.convert("RGB"), attempt_long_edge)
+                t0 = time.time()
+                prompt = build_extraction_prompt(self.schema, page)
+                # 2048: the v2 per-page JSON (incl. page-4 table rows) exceeds the
+                # old 800 budget and would be truncated -> guaranteed parse failure.
+                raw = self._ask([img], prompt, max_new_tokens=2048)
+                fields, ok = parse_extraction_output(raw, self.schema)
+                log.info("%s (page %s): parse_ok=%s, %d non-null, %.1fs",
+                         image_path.name, page, ok,
+                         count_non_null(fields, self.schema.fields),
+                         time.time() - t0)
+                return fields, ok
+            except RuntimeError as exc:
+                if "out of memory" not in str(exc).lower():
+                    raise
+                if attempt_long_edge == 768:
+                    raise
+                if self.torch.cuda.is_available():
+                    self.torch.cuda.empty_cache()
+                log.warning("OOM while extracting page %s; retrying with lower long_edge=%s", page, attempt_long_edge)
+        raise RuntimeError(f"Failed to extract page {page}: out of memory")
 
     def extract_document(self, image_paths: list, long_edge: int) -> tuple:
         """Single pass over ALL pages of one person-document, in page order.
         ONE model call, ONE full-schema JSON (no per-page outputs, no
         cross-page merge needed — the model sees every page at once).
         Returns (nested shaped fields dict, parse_ok)."""
-        imgs: list = []
-        for p in image_paths:            # order preserved: page 0 first
-            with Image.open(p) as im:
-                imgs.append(_pin_size(im.convert("RGB"), long_edge))
-        t0 = time.time()
-        prompt = build_extraction_prompt(self.schema, n_pages=len(imgs))
-        raw = self._ask(imgs, prompt, max_new_tokens=4096)  # full v2 JSON
-        fields, ok = parse_extraction_output(raw, self.schema)
-        log.info("document %d pages: parse_ok=%s, %d non-null, %.1fs",
-                 len(imgs), ok, count_non_null(fields, self.schema.fields),
-                 time.time() - t0)
-        return fields, ok
+        for attempt_long_edge in [long_edge, max(1024, long_edge // 2), 1024, 768]:
+            try:
+                imgs: list = []
+                for p in image_paths:            # order preserved: page 0 first
+                    with Image.open(p) as im:
+                        imgs.append(_pin_size(im.convert("RGB"), attempt_long_edge))
+                t0 = time.time()
+                prompt = build_extraction_prompt(self.schema, n_pages=len(imgs))
+                raw = self._ask(imgs, prompt, max_new_tokens=4096)  # full v2 JSON
+                fields, ok = parse_extraction_output(raw, self.schema)
+                log.info("document %d pages: parse_ok=%s, %d non-null, %.1fs",
+                         len(imgs), ok, count_non_null(fields, self.schema.fields),
+                         time.time() - t0)
+                return fields, ok
+            except RuntimeError as exc:
+                if "out of memory" not in str(exc).lower():
+                    raise
+                if attempt_long_edge == 768:
+                    raise
+                if self.torch.cuda.is_available():
+                    self.torch.cuda.empty_cache()
+                log.warning("OOM while extracting document; retrying with lower long_edge=%s", attempt_long_edge)
+        raise RuntimeError("Failed to extract document: out of memory")

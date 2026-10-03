@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import MAIN_PROJECT_ROOT, get_extraction_dir
+from .doctor_utils import normalize_doctor_name
 from .models import (
     Candidate,
     Declaration,
@@ -419,17 +420,18 @@ def import_one(session: Session, data: PMEExtraction):
     )
 
     if doctor_name:
+        normalized_name = normalize_doctor_name(doctor_name)
         doctor = session.scalar(
             select(Doctor).where(
-                Doctor.doctor_name == doctor_name,
-                Doctor.doctor_role
-                == "Railway Medical Examiner",
+                (Doctor.full_name_english == normalized_name)
+                | (Doctor.doctor_name == doctor_name)
             )
         )
 
         if not doctor:
             doctor = Doctor(
                 doctor_name=doctor_name,
+                full_name_english=normalized_name or doctor_name,
                 doctor_role="Railway Medical Examiner",
             )
 
@@ -437,6 +439,7 @@ def import_one(session: Session, data: PMEExtraction):
             session.flush()
 
         examination.examining_doctor = doctor
+        candidate.doctor_id = doctor.id
 
     # ---------------------------------------------------------
     # Extraction run

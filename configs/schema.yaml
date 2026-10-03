@@ -240,6 +240,12 @@ fields:
         source_type: handwritten
         extraction_hint: "The freehand examination block below the vision table (colour perception, night vision, urine, hearing, PR, BP, heart, lungs, etc.). Verbatim, lines joined with '; '; null if none legible."
 
+      - field_name: doctor_name
+        data_type: string
+        source_type: handwritten
+        printed_row_label: "MEDICAL EXAMINER / SIGNATURE / DR."
+        extraction_hint: "The full name of the Railway Medical Examiner appearing in the signature or stamp area at the bottom of the page. Include titles such as Dr./DMO/BRC if present. If the stamp is unreadable, null."
+
   # ===========================================================================
   # PAGE 4 — Sectional Tables (Declaration: Part-I and Part-II)
   # ===========================================================================
@@ -294,3 +300,9 @@ fields:
               data_type: boolean
               source_type: handwritten
               extraction_hint: "The handwritten answer for this row: true if 'Yes', false if 'No', null if unreadable."
+
+      - field_name: doctor_name
+        data_type: string
+        source_type: handwritten
+        printed_row_label: "MEDICAL EXAMINER / SIGNATURE / DR."
+        extraction_hint: "The full name of the Railway Medical Examiner appearing in the signature or stamp area on this declaration page. Include titles such as Dr./DMO/BRC when legible. Prefer the explicit name over any generic stamp text."
