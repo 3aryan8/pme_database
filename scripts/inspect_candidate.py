@@ -53,14 +53,6 @@ def inspect_candidate(roll_number: str):
             candidate.date_of_birth,
         )
         print_value(
-            "Mobile Number",
-            candidate.mobile_number,
-        )
-        print_value(
-            "Email",
-            candidate.email,
-        )
-        print_value(
             "Recruitment CEN",
             candidate.recruitment_cen,
         )

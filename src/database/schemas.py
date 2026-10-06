@@ -41,11 +41,6 @@ class GeneralDetails(BaseModel):
     father_name: str | None = None
     date_of_birth: date | None = None
 
-    # Page 4 candidate particulars may be extracted into
-    # the general-details section by the OCR pipeline.
-    mobile_number: str | None = None
-    email: str | None = None
-
     dv_date: date | None = None
     medical_examination_date: date | None = None
 

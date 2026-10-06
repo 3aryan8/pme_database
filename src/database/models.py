@@ -26,9 +26,6 @@ class Candidate(Timestamps, Base):
     father_name: Mapped[str | None] = mapped_column(String(200))
     date_of_birth: Mapped[date | None] = mapped_column(Date)
 
-    mobile_number: Mapped[str | None] = mapped_column(String(30))
-    email: Mapped[str | None] = mapped_column(String(255))
-
     recruitment_cen: Mapped[str | None] = mapped_column(String(50))
     doctor_id: Mapped[int | None] = mapped_column(
         ForeignKey("doctors.id"),

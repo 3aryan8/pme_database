@@ -54,6 +54,11 @@ def _ensure_sqlite_doctor_columns(target_engine=None) -> None:
                         "WHERE doctor_id IS NULL"
                     )
                 )
+            for column_name in ("mobile_number", "email"):
+                if column_name in candidate_columns:
+                    connection.execute(
+                        text(f"ALTER TABLE candidates DROP COLUMN {column_name}")
+                    )
 
         doctor_columns = {column["name"] for column in inspector.get_columns("doctors")}
         for column_name, column_sql in {

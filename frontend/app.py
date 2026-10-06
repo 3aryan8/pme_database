@@ -4,6 +4,7 @@ from __future__ import annotations
 from io import BytesIO
 from html import escape
 import os
+import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -39,6 +40,79 @@ from src.database.report_images import find_report_images
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+FIT_CLASS_LABELS = (
+    "A3 & below",
+    "A3 & below with DV Glasses",
+    "A3 & below without Glasses",
+    "A3 & below and below",
+    "A3 & below and below With DV Glasses",
+    "A3 & below and below Without Glasses",
+    "B1 & below and below",
+    "B1 & below and below without Glass",
+    "B1 & below and below with DV Glasses",
+)
+
+
+def _canonical_fit_class(value: str) -> str | None:
+    """Map OCR/case variations to the supported fit-in-class labels."""
+    normalized = re.sub(r"[^A-Z0-9]+", " ", value.upper()).strip()
+    if not normalized or normalized.startswith("UNFIT"):
+        return None
+
+    is_a3 = bool(
+        re.search(r"\bA3\b", normalized)
+        or re.search(r"\b(?:A|AYE|ANY|AGE)\s*THREE\b", normalized)
+        or re.search(r"\bONE\s+THREE\b", normalized)
+    )
+    is_b1 = bool(
+        re.search(r"\bB1\b", normalized)
+        or re.search(r"\b(?:BEE|BET|SEE)\s*ONE\b", normalized)
+    )
+    if not is_a3 and not is_b1:
+        return None
+    if is_a3 and not any(
+        marker in normalized for marker in ("BELOW", "THREE", "FIT IN")
+    ):
+        return None
+
+    has_repeated_below = "AND BELOW" in normalized
+    has_without_glasses = bool(
+        re.search(r"\bWITHOUT\b.*\bGLASS", normalized)
+        or re.search(r"\bNO\s+GLASS", normalized)
+    )
+    has_glasses = bool(
+        re.search(r"\bDV\b", normalized)
+        or re.search(r"\bWITH\b.*\bGLASS", normalized)
+    )
+    if is_b1:
+        if has_without_glasses:
+            return FIT_CLASS_LABELS[7]
+        if has_glasses:
+            return FIT_CLASS_LABELS[8]
+        return FIT_CLASS_LABELS[6]
+    if has_repeated_below:
+        if has_without_glasses:
+            return FIT_CLASS_LABELS[5]
+        if has_glasses:
+            return FIT_CLASS_LABELS[4]
+        return FIT_CLASS_LABELS[3]
+    if has_without_glasses:
+        return FIT_CLASS_LABELS[2]
+    if has_glasses:
+        return FIT_CLASS_LABELS[1]
+    return FIT_CLASS_LABELS[0]
+
+
+def _fit_class_options(values: list[str]) -> dict[str, list[str]]:
+    """Group recognized OCR variations under the supported labels."""
+    options = {label: [] for label in FIT_CLASS_LABELS}
+    for value in values:
+        label = _canonical_fit_class(value)
+        if label is not None:
+            options[label].append(value)
+    return {label: raw_values for label, raw_values in options.items() if raw_values}
 
 
 st.set_page_config(
@@ -116,6 +190,7 @@ st.markdown(
     [data-testid="stTextInput"] input { border-radius: 9px; border: 2px solid #159b86; background: #fbfffd; color: var(--ink) !important; caret-color: var(--teal); box-shadow: 0 0 0 2px rgba(21,155,134,.10); }
     [data-testid="stTextInput"] input::placeholder { color: #71827d !important; opacity: 1; }
     [data-testid="stTextInput"] input:focus { border-color: #087563; box-shadow: 0 0 0 3px rgba(15,139,120,.24); }
+    [data-testid="stSelectbox"] label, [data-testid="stSelectbox"] label p { color: var(--ink) !important; font-weight: 700; }
     [data-testid="stFormSubmitButton"] button, [data-testid="stBaseButton-primary"] { background: var(--teal); border: 0; border-radius: 10px; font-weight: 700; }
     [data-testid="stFormSubmitButton"] button:hover, [data-testid="stBaseButton-primary"]:hover { background: #0b7465; }
     [data-testid="stMain"] [data-testid="stBaseButton-secondary"] { background: #eaf7f2 !important; color: var(--deep) !important; border: 1px solid #0f8b78 !important; border-radius: 9px; }
@@ -260,8 +335,6 @@ def show_candidate(candidate: Candidate) -> None:
             kv("Date of birth", candidate.date_of_birth)
             kv("Roll number", candidate.roll_number)
             kv("Recruitment CEN", candidate.recruitment_cen)
-            kv("Mobile", candidate.mobile_number)
-            kv("Email", candidate.email)
             st.markdown("</div>", unsafe_allow_html=True)
         with right:
             st.markdown('<div class="detail-card"><h4>Medical examination</h4>', unsafe_allow_html=True)
@@ -550,7 +623,7 @@ def main() -> None:
                 .order_by(FitnessClassification.fit_in_class)
             ).all()
         medical_classes = [value for value in medical_classes if value.strip()]
-        fit_in_class_values = [value for value in fit_in_class_values if value.strip()]
+        fit_in_class_options = _fit_class_options(fit_in_class_values)
 
         doctor_by_label = {}
         for doctor in doctors:
@@ -579,7 +652,7 @@ def main() -> None:
             with fit_column:
                 selected_fit_in_class = st.selectbox(
                     "Fit in class",
-                    options=["All", *fit_in_class_values],
+                    options=["All", *fit_in_class_options],
                 )
             submitted = st.form_submit_button("Search candidates", type="primary", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -604,7 +677,7 @@ def main() -> None:
                             else None
                         ),
                         fit_in_class=(
-                            selected_fit_in_class
+                            fit_in_class_options[selected_fit_in_class]
                             if selected_fit_in_class != "All"
                             else None
                         ),

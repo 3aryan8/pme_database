@@ -1,6 +1,8 @@
 # Phase: normalized database access | Input: SQLAlchemy session and query parameters | Output: candidates, examinations, and report data | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
@@ -503,7 +505,7 @@ def get_candidates_by_doctor(
     session: Session,
     doctor_id: int,
     medical_class: str | None = None,
-    fit_in_class: str | None = None,
+    fit_in_class: str | Sequence[str] | None = None,
 ) -> list[Candidate]:
     """Return candidates for a doctor, optionally filtered by exam outcomes."""
     statement = select(Candidate)
@@ -527,7 +529,12 @@ def get_candidates_by_doctor(
             statement = statement.where(MedicalExamination.medical_class == medical_class)
         if fit_in_class is not None:
             statement = statement.join(MedicalExamination.fitness).where(
-                FitnessClassification.fit_in_class == fit_in_class
+                (
+                    FitnessClassification.fit_in_class.in_(fit_in_class)
+                    if isinstance(fit_in_class, Sequence)
+                    and not isinstance(fit_in_class, str)
+                    else FitnessClassification.fit_in_class == fit_in_class
+                )
             )
         statement = statement.distinct()
 

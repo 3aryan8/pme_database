@@ -117,8 +117,6 @@ def import_one(session: Session, data: PMEExtraction):
             candidate_name=clean(general.candidate_name),
             father_name=clean(general.father_name),
             date_of_birth=general.date_of_birth,
-            mobile_number=clean(general.mobile_number),
-            email=clean(general.email),
             recruitment_cen=clean(narrative.recruitment_cen),
         )
 
@@ -130,8 +128,6 @@ def import_one(session: Session, data: PMEExtraction):
             "candidate_name": general.candidate_name,
             "father_name": general.father_name,
             "date_of_birth": general.date_of_birth,
-            "mobile_number": general.mobile_number,
-            "email": general.email,
             "recruitment_cen": narrative.recruitment_cen,
         }
 
