@@ -1,13 +1,19 @@
 # Phase: normalized database access | Input: SQLAlchemy session and query parameters | Output: candidates, examinations, and report data | Command: ``uv run python scripts/generate_report.py``.
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from collections.abc import Sequence
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
+from .database import _ensure_sqlite_doctor_columns
 from .models import (
     Candidate,
     Declaration,
     Doctor,
+    ExaminationDocument,
+    ExaminationPage1,
     ExtractionRun,
     FitnessClassification,
     MedicalExamination,
@@ -16,8 +22,10 @@ from .models import (
     PmeCaseMeasurement,
     PmeVisionRow,
     ReportImage,
+    SourceDocument,
     VisionExamination,
 )
+from .doctor_utils import normalize_doctor_name
 
 
 def get_candidate_directory(session: Session) -> list[Candidate]:
@@ -65,6 +73,19 @@ def get_dashboard_stats(
         "candidates": candidates or 0,
         "examinations": examinations or 0,
     }
+
+
+def get_doctor_directory(session: Session) -> list[Doctor]:
+    """Return every saved doctor in the master table, ordered for the UI dropdown."""
+    statement = (
+        select(Doctor)
+        .order_by(
+            Doctor.full_name_english.asc().nullslast(),
+            Doctor.doctor_name.asc().nullslast(),
+            Doctor.id.asc(),
+        )
+    )
+    return list(session.scalars(statement).all())
 
 
 def search_candidates(
@@ -159,10 +180,77 @@ def get_examination_by_id(
             selectinload(
                 MedicalExamination.extraction_runs
             ),
+            selectinload(MedicalExamination.page_statuses),
+            selectinload(MedicalExamination.page_1),
+            selectinload(MedicalExamination.page_4),
+            selectinload(MedicalExamination.authentication_records),
+            selectinload(MedicalExamination.examination_documents).selectinload(
+                ExaminationDocument.source_document
+            ).selectinload(SourceDocument.pages),
+            selectinload(MedicalExamination.extracted_field_values),
+            selectinload(MedicalExamination.status_events),
         )
     )
 
     return session.scalar(statement)
+
+
+def search_examinations(
+    session: Session,
+    *,
+    candidate_id: int | None = None,
+    candidate_name: str | None = None,
+    roll_number: str | None = None,
+    medical_examination_date=None,
+    candidate_class: str | None = None,
+    fit_in_class: str | None = None,
+    unfit_in_class: str | None = None,
+    overall_status: str | None = None,
+) -> list[MedicalExamination]:
+    """Search examination history and return complete records in one operation."""
+    statement = (
+        select(MedicalExamination)
+        .join(MedicalExamination.candidate)
+        .outerjoin(ExaminationPage1, ExaminationPage1.examination_id == MedicalExamination.id)
+        .outerjoin(FitnessClassification, FitnessClassification.examination_id == MedicalExamination.id)
+    )
+    if candidate_id is not None:
+        statement = statement.where(MedicalExamination.candidate_id == candidate_id)
+    if candidate_name:
+        statement = statement.where(Candidate.candidate_name.ilike(f"%{candidate_name.strip()}%"))
+    if roll_number:
+        statement = statement.where(Candidate.roll_number == roll_number.strip())
+    if medical_examination_date is not None:
+        statement = statement.where(
+            MedicalExamination.medical_examination_date == medical_examination_date
+        )
+    if candidate_class:
+        statement = statement.where(ExaminationPage1.candidate_class == candidate_class)
+    if fit_in_class:
+        statement = statement.where(FitnessClassification.fit_in_class == fit_in_class)
+    if unfit_in_class:
+        statement = statement.where(FitnessClassification.unfit_in_class == unfit_in_class)
+    if overall_status:
+        statement = statement.where(MedicalExamination.overall_status == overall_status)
+    statement = statement.order_by(
+        MedicalExamination.medical_examination_date.desc().nullslast(),
+        MedicalExamination.id.desc(),
+    ).options(
+        selectinload(MedicalExamination.candidate),
+        selectinload(MedicalExamination.page_1),
+        selectinload(MedicalExamination.page_4),
+        selectinload(MedicalExamination.pme_case).selectinload(PmeCase.vision_rows),
+        selectinload(MedicalExamination.pme_case).selectinload(PmeCase.measurements),
+        selectinload(MedicalExamination.vision),
+        selectinload(MedicalExamination.physical),
+        selectinload(MedicalExamination.fitness),
+        selectinload(MedicalExamination.declarations),
+        selectinload(MedicalExamination.page_statuses),
+        selectinload(MedicalExamination.authentication_records),
+        selectinload(MedicalExamination.examination_documents),
+        selectinload(MedicalExamination.extracted_field_values),
+    )
+    return list(session.scalars(statement).unique().all())
 
 
 def get_latest_examination_for_candidate(
@@ -444,6 +532,97 @@ def get_doctor(
         Doctor,
         doctor_id,
     )
+
+
+def search_doctors(
+    session: Session,
+    query: str,
+) -> list[Doctor]:
+    """Search by English name, Hindi name, or designation."""
+    if not query or not query.strip():
+        return []
+
+    needle = normalize_doctor_name(query)
+    token = f"%{needle.casefold()}%"
+    statement = (
+        select(Doctor)
+        .where(
+            (func.lower(func.coalesce(Doctor.full_name_english, ""))
+             .like(token))
+            | (func.lower(func.coalesce(Doctor.full_name_hindi, ""))
+               .like(f"%{query.strip().casefold()}%"))
+            | (func.lower(func.coalesce(Doctor.designation, ""))
+               .like(f"%{query.strip().casefold()}%"))
+        )
+        .order_by(Doctor.full_name_english.asc().nullslast())
+    )
+    try:
+        return list(session.scalars(statement).all())
+    except OperationalError as exc:
+        error_text = str(exc)
+        if "no such column" not in error_text or "doctors." not in error_text:
+            raise
+
+        session.rollback()
+        bind = session.bind
+        if bind is not None:
+            _ensure_sqlite_doctor_columns(bind)
+        session.expire_all()
+        return list(session.scalars(statement).all())
+
+
+def get_candidates_by_doctor(
+    session: Session,
+    doctor_id: int,
+    medical_class: str | None = None,
+    fit_in_class: str | Sequence[str] | None = None,
+) -> list[Candidate]:
+    """Return candidates for a doctor, optionally filtered by exam outcomes."""
+    statement = select(Candidate)
+    if medical_class is None and fit_in_class is None:
+        statement = statement.where(
+            or_(
+                Candidate.doctor_id == doctor_id,
+                Candidate.examinations.any(
+                    MedicalExamination.examining_doctor_id == doctor_id
+                ),
+            )
+        )
+    else:
+        statement = statement.join(Candidate.examinations).where(
+            or_(
+                Candidate.doctor_id == doctor_id,
+                MedicalExamination.examining_doctor_id == doctor_id,
+            )
+        )
+        if medical_class is not None:
+            statement = statement.outerjoin(
+                ExaminationPage1,
+                ExaminationPage1.examination_id == MedicalExamination.id,
+            ).where(
+                or_(
+                    ExaminationPage1.candidate_class == medical_class,
+                    (
+                        ExaminationPage1.examination_id.is_(None)
+                        & (MedicalExamination.medical_class == medical_class)
+                    ),
+                )
+            )
+        if fit_in_class is not None:
+            statement = statement.join(MedicalExamination.fitness).where(
+                (
+                    FitnessClassification.fit_in_class.in_(fit_in_class)
+                    if isinstance(fit_in_class, Sequence)
+                    and not isinstance(fit_in_class, str)
+                    else FitnessClassification.fit_in_class == fit_in_class
+                )
+            )
+        statement = statement.distinct()
+
+    statement = statement.order_by(
+        Candidate.candidate_name.asc().nullslast(), Candidate.id.asc()
+    )
+    return list(session.scalars(statement).all())
 
 
 def get_extraction_runs(

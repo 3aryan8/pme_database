@@ -152,6 +152,31 @@ and date count as one examination; examinations on different dates count
 separately. The dashboard's candidate search and record details are served from
 the normalized database.
 
+### Dashboard searches
+
+- **Search candidate** finds a record by the exact combination of candidate
+        name, father's name, and date of birth. Selecting a match displays its
+        identity, medical examination, doctor, extracted data, and available report
+        page images.
+- **Doctor search** lets you choose a saved doctor and optionally filter by
+        **Candidate class** and **Fit in class**. Each filter defaults to **All**. Use
+        **Search candidates** to list candidates matching the selected values.
+- Click an approved-candidate row to open that candidate's full record while
+        keeping the filtered list visible. Use **Hide candidate details** to close
+        the record view.
+- **Candidate directory** browses candidate records without an identity search.
+
+Doctor signatures, stamps, candidate photos, and thumbprints are stored as
+encrypted, examination-specific evidence with their source page. Detection
+does not establish authenticity; evidence stays unverified until reviewed.
+Legacy doctor matching references remain readable for compatibility, but new
+manual and detected evidence is not written as plaintext doctor-directory PNGs.
+
+Doctor names are stored in the normalized doctor master and populated when
+extraction records are synced. Doctor-name fields are extracted from report
+pages 3 and 4. Candidate-class and fit-in-class dropdown choices use the saved
+extraction values, so OCR spelling variants may appear as separate options.
+
 Default data locations and environment overrides:
 
 | Setting | Default | Purpose |
@@ -183,6 +208,52 @@ Database connection settings are read from environment variables by the
 database configuration module. The default local workflow uses SQLite; keep
 credentials and machine-specific settings in a local `.env` file rather than
 committing them.
+
+## Four-page examination storage
+
+The normalized schema is managed with Alembic. Existing databases must be
+backed up and migrated explicitly; normal imports refuse an unstamped legacy
+database rather than partially creating tables. Before an approved production
+migration, review the timestamped backup and schema/count baseline under
+`data/`.
+
+```bash
+# Apply only after the backup and migration have been reviewed
+uv run alembic -c alembic.ini upgrade head
+
+# Use the source-form-specific reviewed manifest, not the dynamic four-page split
+uv run python -m src.assembly.run_assembly \
+        --source "data/ground_truth/RRB CANDIDATES-1.pdf" \
+        --split-config configs/splits.RRB-CANDIDATES-1.yaml
+
+# Register the encrypted original and its explicit form/supplemental page map
+uv run python scripts/register_source_document.py \
+        --source "data/ground_truth/RRB CANDIDATES-1.pdf" \
+        --split-config configs/splits.RRB-CANDIDATES-1.yaml
+```
+
+The reviewed 54-page source map contains twelve four-page examination packets
+and six unassigned supplemental pages. Original-PDF page numbers and local
+form-page numbers are stored separately. Supplemental pages are retained as
+source material and are not linked to a candidate unless a reviewer confirms
+the association.
+
+Encrypted originals, signatures, stamps, photos, and thumbprints are stored
+outside the repository under `PME_PRIVATE_DOCUMENT_ROOT` (default:
+`~/.local/share/pme_database/private_documents`). Set
+`PME_DOCUMENT_ENCRYPTION_KEY` and `PME_FIELD_ENCRYPTION_KEY` through the
+deployment secret manager; do not commit keys. Generate keys with
+`python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`
+and retain backups of both keys separately from the database backup. Without
+the keys, sensitive fields and document assets fail closed. Authorized document
+retrieval must call `src.database.security.retrieve_document` with the
+application's authorization policy; all read and denied-read decisions are
+audited. This repository does not yet provide user authentication or a role
+provider, so production deployment must supply those controls before exposing
+document retrieval to users.
+
+See [docs/four_page_schema.md](docs/four_page_schema.md) for table relationships,
+status transitions, provenance mapping, and migration/backout notes.
 
 ## Docker
 

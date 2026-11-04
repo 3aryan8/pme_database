@@ -32,6 +32,21 @@ class SplitMap:
         self.page_count = page_count
         self.confirmed: bool = bool(data.get("confirmed", False))
         self.ignored: set = set(data.get("ignored_pages") or [])
+        self.supplemental_documents = data.get("supplemental_documents") or []
+        supplemental_pages: set[int] = set()
+        for document in self.supplemental_documents:
+            pages = document.get("pages") or []
+            for page_number in pages:
+                if not isinstance(page_number, int) or isinstance(page_number, bool):
+                    raise ValueError("supplemental page numbers must be integers")
+                if not 1 <= page_number <= page_count:
+                    raise ValueError(
+                        f"supplemental page {page_number} is outside 1..{page_count}"
+                    )
+                if page_number in supplemental_pages:
+                    raise ValueError(f"supplemental page {page_number} is listed twice")
+                supplemental_pages.add(page_number)
+        self.ignored.update(supplemental_pages)
         self.pages_per_person: int | None = data.get("pages_per_person")
         if self.pages_per_person is not None:
             if self.ignored:
@@ -53,6 +68,9 @@ class SplitMap:
                     raise ValueError(f"person {i}: invalid range {p['pages']}")
                 self.persons.append((i, first, last))
         self._validate_coverage()
+        expected_sha = data.get("source_sha256")
+        if expected_sha and expected_sha != source_sha:
+            raise ValueError("split map source_sha256 does not match the source PDF")
 
     @staticmethod
     def _dynamic_persons(pages_per_person, page_count: int
@@ -71,6 +89,13 @@ class SplitMap:
         return [(i, i * n + 1, (i + 1) * n) for i in range(count)]
 
     def _validate_coverage(self) -> None:
+        invalid_ignored = sorted(
+            page for page in self.ignored
+            if not isinstance(page, int) or isinstance(page, bool)
+            or not 1 <= page <= self.page_count
+        )
+        if invalid_ignored:
+            raise ValueError(f"ignored_pages contains invalid pages: {invalid_ignored}")
         covered = sorted(pg for _, f, l in self.persons for pg in range(f, l + 1))
         expected = sorted(
             pg for pg in range(1, self.page_count + 1) if pg not in self.ignored)
@@ -88,10 +113,14 @@ class SplitMap:
         return "manually_cleared" if self.confirmed else "flagged"
 
 
-def load_split_map(source_path=None) -> SplitMap:
+def load_split_map(source_path=None, config_path=None) -> SplitMap:
     """source_path overrides the splits.yaml 'source' (the merged PDF);
     the split map must then describe that PDF."""
-    path = config.root_dir / "configs" / "splits.yaml"
+    path = (
+        Path(config_path).expanduser().resolve()
+        if config_path is not None
+        else config.root_dir / "configs" / "splits.yaml"
+    )
     if not path.exists():
         raise FileNotFoundError(
             f"{path} not found. Fill it in manually after inspecting the PDF, "

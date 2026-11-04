@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from io import BytesIO
+from html import escape
 import os
+import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -19,17 +21,99 @@ if str(REPO_DIR) not in sys.path:
 from src.database.config import get_extraction_dir
 from src.database.database import get_session, init_db
 from src.database.importer import sync_extractions
-from src.database.models import Candidate
+from src.database.models import (
+    Candidate,
+    Doctor,
+    ExaminationPage1,
+    FitnessClassification,
+    MedicalExamination,
+)
 from src.database.repository import (
     get_candidate_directory,
+    get_candidates_by_doctor,
     get_dashboard_stats,
+    get_doctor_directory,
     get_latest_examination_for_candidate,
     search_candidates,
+    search_doctors,
 )
 from src.database.report_images import find_report_images
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+FIT_CLASS_LABELS = (
+    "A3 & below",
+    "A3 & below with DV Glasses",
+    "A3 & below without Glasses",
+    "A3 & below and below",
+    "A3 & below and below With DV Glasses",
+    "A3 & below and below Without Glasses",
+    "B1 & below and below",
+    "B1 & below and below without Glass",
+    "B1 & below and below with DV Glasses",
+)
+
+
+def _canonical_fit_class(value: str) -> str | None:
+    """Map OCR/case variations to the supported fit-in-class labels."""
+    normalized = re.sub(r"[^A-Z0-9]+", " ", value.upper()).strip()
+    if not normalized or normalized.startswith("UNFIT"):
+        return None
+
+    is_a3 = bool(
+        re.search(r"\bA3\b", normalized)
+        or re.search(r"\b(?:A|AYE|ANY|AGE)\s*THREE\b", normalized)
+        or re.search(r"\bONE\s+THREE\b", normalized)
+    )
+    is_b1 = bool(
+        re.search(r"\bB1\b", normalized)
+        or re.search(r"\b(?:BEE|BET|SEE)\s*ONE\b", normalized)
+    )
+    if not is_a3 and not is_b1:
+        return None
+    if is_a3 and not any(
+        marker in normalized for marker in ("BELOW", "THREE", "FIT IN")
+    ):
+        return None
+
+    has_repeated_below = "AND BELOW" in normalized
+    has_without_glasses = bool(
+        re.search(r"\bWITHOUT\b.*\bGLASS", normalized)
+        or re.search(r"\bNO\s+GLASS", normalized)
+    )
+    has_glasses = bool(
+        re.search(r"\bDV\b", normalized)
+        or re.search(r"\bWITH\b.*\bGLASS", normalized)
+    )
+    if is_b1:
+        if has_without_glasses:
+            return FIT_CLASS_LABELS[7]
+        if has_glasses:
+            return FIT_CLASS_LABELS[8]
+        return FIT_CLASS_LABELS[6]
+    if has_repeated_below:
+        if has_without_glasses:
+            return FIT_CLASS_LABELS[5]
+        if has_glasses:
+            return FIT_CLASS_LABELS[4]
+        return FIT_CLASS_LABELS[3]
+    if has_without_glasses:
+        return FIT_CLASS_LABELS[2]
+    if has_glasses:
+        return FIT_CLASS_LABELS[1]
+    return FIT_CLASS_LABELS[0]
+
+
+def _fit_class_options(values: list[str]) -> dict[str, list[str]]:
+    """Group recognized OCR variations under the supported labels."""
+    options = {label: [] for label in FIT_CLASS_LABELS}
+    for value in values:
+        label = _canonical_fit_class(value)
+        if label is not None:
+            options[label].append(value)
+    return {label: raw_values for label, raw_values in options.items() if raw_values}
 
 
 st.set_page_config(
@@ -79,6 +163,10 @@ st.markdown(
     .kv-important { margin: .3rem -.35rem; padding: .72rem .65rem; border: 1px solid #8ed2bf; border-left: 4px solid #0f8b78; border-radius: 9px; background: #e7f8f1; }
     .kv-important span:first-child { color: #087563; font-weight: 800; }
     .kv-important span:last-child { color: #075f51; font-size: 1rem; font-weight: 800; }
+    .doctor-highlight { margin: .5rem 0 .9rem; padding: .8rem .9rem; border: 1px solid #f4c96f; border-left: 5px solid #d98100; border-radius: 12px; background: linear-gradient(90deg, #fffaf0 0%, #fffdf8 100%); color: #2a2107; }
+    .doctor-highlight strong { color: #915d00; }
+    .doctor-highlight .doctor-name { font-size: 1rem; font-weight: 800; color: #2a2107; }
+    .doctor-highlight .doctor-meta { color: #5f4f2c; font-size: .82rem; }
     .result-banner { background: #e9f8f2; border: 1px solid #bde6d8; color: #126b5a; padding: 1rem 1.1rem; border-radius: 12px; margin: .9rem 0 1rem; }
     .subtle-note { color: var(--muted); font-size: .82rem; margin: -.2rem 0 .55rem; }
     .required-note { display: flex; align-items: center; gap: .55rem; background: #fff7e6; border: 1px solid #f0c36b; color: #7b4b00; border-radius: 10px; padding: .5rem .7rem; margin: .15rem 0 .65rem; font-weight: 700; font-size: .8rem; }
@@ -103,8 +191,16 @@ st.markdown(
     [data-testid="stTextInput"] input { border-radius: 9px; border: 2px solid #159b86; background: #fbfffd; color: var(--ink) !important; caret-color: var(--teal); box-shadow: 0 0 0 2px rgba(21,155,134,.10); }
     [data-testid="stTextInput"] input::placeholder { color: #71827d !important; opacity: 1; }
     [data-testid="stTextInput"] input:focus { border-color: #087563; box-shadow: 0 0 0 3px rgba(15,139,120,.24); }
+    [data-testid="stSelectbox"] label, [data-testid="stSelectbox"] label p { color: var(--ink) !important; font-weight: 700; }
     [data-testid="stFormSubmitButton"] button, [data-testid="stBaseButton-primary"] { background: var(--teal); border: 0; border-radius: 10px; font-weight: 700; }
     [data-testid="stFormSubmitButton"] button:hover, [data-testid="stBaseButton-primary"]:hover { background: #0b7465; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"] { background: #eaf7f2 !important; color: var(--deep) !important; border: 1px solid #0f8b78 !important; border-radius: 9px; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"] p { color: var(--deep) !important; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"]:hover { background: #d8f0e7 !important; border-color: #087563 !important; }
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"]:focus-visible { outline: 3px solid #7ce0b4; outline-offset: 2px; }
+    [data-testid="stMain"] .candidate-open-link { display: block; width: 100%; box-sizing: border-box; margin: .35rem 0; padding: .62rem .8rem; border: 1px solid #0f8b78; border-radius: 9px; background: #eaf7f2; color: #0d3b35 !important; text-align: center; text-decoration: none !important; font-weight: 600; }
+    [data-testid="stMain"] .candidate-open-link:hover { background: #d8f0e7; border-color: #087563; }
+    [data-testid="stMain"] .candidate-open-link:focus-visible { outline: 3px solid #7ce0b4; outline-offset: 2px; }
     [data-testid="stDownloadButton"] button { background: var(--teal) !important; color: #ffffff !important; border: 1px solid #087563 !important; border-radius: 10px; font-weight: 700; }
     [data-testid="stDownloadButton"] button p { color: #ffffff !important; }
     [data-testid="stDownloadButton"] button:hover { background: #0b7465 !important; border-color: #075f51 !important; }
@@ -240,17 +336,36 @@ def show_candidate(candidate: Candidate) -> None:
             kv("Date of birth", candidate.date_of_birth)
             kv("Roll number", candidate.roll_number)
             kv("Recruitment CEN", candidate.recruitment_cen)
-            kv("Mobile", candidate.mobile_number)
-            kv("Email", candidate.email)
             st.markdown("</div>", unsafe_allow_html=True)
         with right:
             st.markdown('<div class="detail-card"><h4>Medical examination</h4>', unsafe_allow_html=True)
             kv("DV date", examination.dv_date)
             kv("Medical examination date", examination.medical_examination_date)
-            kv("Medical class", examination.medical_class, important=True)
+            kv(
+                "Candidate class",
+                examination.page_1.candidate_class
+                if examination.page_1 else examination.medical_class,
+                important=True,
+            )
             kv("Identification marks", examination.identification_marks)
             kv("Declaration date", examination.candidate_declaration_date)
-            kv("Doctor", examination.examining_doctor.doctor_name if examination.examining_doctor else None)
+            doctor = examination.examining_doctor
+            if doctor is None:
+                candidate_doctor_id = session.scalar(
+                    select(Candidate.doctor_id).where(Candidate.id == candidate.id)
+                )
+                doctor = session.get(Doctor, candidate_doctor_id) if candidate_doctor_id else None
+            doctor_name = (
+                doctor.full_name_english
+                if doctor and doctor.full_name_english
+                else doctor.doctor_name if doctor else None
+            )
+            if doctor_name:
+                st.markdown(
+                    f'<div class="doctor-highlight"><div class="doctor-name"><strong>Doctor:</strong> {display(doctor_name)}</div></div>',
+                    unsafe_allow_html=True,
+                )
+            kv("Doctor", doctor_name)
             st.markdown("</div>", unsafe_allow_html=True)
 
         pme, vision = st.columns(2)
@@ -332,6 +447,32 @@ def main() -> None:
     if "sync_message" not in st.session_state:
         st.session_state.sync_message = None
 
+    if hasattr(st, "query_params"):
+        query_params = st.query_params
+        candidate_id_param = query_params.get("candidate_id")
+    else:
+        query_params = st.experimental_get_query_params()
+        candidate_id_param = query_params.get("candidate_id", [None])[0]
+    if candidate_id_param is not None:
+        if not candidate_id_param.isdigit():
+            st.error("The candidate link is invalid.")
+            return
+
+        candidate_id = int(candidate_id_param)
+        with get_session() as session:
+            candidate = session.get(Candidate, candidate_id)
+
+        if candidate is None:
+            st.error("This candidate record could not be found.")
+            return
+
+        st.markdown(
+            '<div class="record-heading"><h3>Candidate information</h3></div>',
+            unsafe_allow_html=True,
+        )
+        show_candidate(candidate)
+        return
+
     st.markdown(
         '<div class="hero"><div class="eyebrow">PME records · clinical data workspace</div>'
         '<h1>Candidate Database</h1>'
@@ -360,7 +501,7 @@ def main() -> None:
     with st.sidebar:
         st.markdown("## ✚ PME Dashboard")
         st.caption("Connected directly to the existing database")
-        page = st.radio("Navigate", ["Search candidate", "Candidate directory"])
+        page = st.radio("Navigate", ["Search candidate", "Doctor search", "Candidate directory"])
         if st.button("Sync extraction files", use_container_width=True):
             with st.spinner("Fetching and syncing extraction files..."):
                 try:
@@ -466,6 +607,149 @@ def main() -> None:
                 'Check the spelling of the name, father’s name, and DOB, then try again.</div>',
                 unsafe_allow_html=True,
             )
+    elif page == "Doctor search":
+        st.markdown(
+            '<div class="panel search-panel"><div class="section-kicker">Doctor lookup</div>'
+            '<div class="section-title">Doctor master</div>'
+            '<div class="subtle-note">Choose a saved doctor from the dropdown to view all approved candidates linked to that doctor.</div>',
+            unsafe_allow_html=True,
+        )
+        with get_session() as session:
+            doctors = get_doctor_directory(session)
+            candidate_classes = session.scalars(
+                select(ExaminationPage1.candidate_class)
+                .where(ExaminationPage1.candidate_class.is_not(None))
+                .distinct()
+                .order_by(ExaminationPage1.candidate_class)
+            ).all()
+            fit_in_class_values = session.scalars(
+                select(FitnessClassification.fit_in_class)
+                .where(FitnessClassification.fit_in_class.is_not(None))
+                .distinct()
+                .order_by(FitnessClassification.fit_in_class)
+            ).all()
+        candidate_classes = [value for value in candidate_classes if value.strip()]
+        fit_in_class_options = _fit_class_options(fit_in_class_values)
+
+        doctor_by_label = {}
+        for doctor in doctors:
+            label = doctor.full_name_english or doctor.doctor_name or f"Doctor {doctor.id}"
+            doctor_by_label.setdefault(label, doctor)
+        options = list(doctor_by_label)
+
+        with st.form("doctor-search", clear_on_submit=False):
+            doctor_column, medical_column, fit_column = st.columns(3)
+            with doctor_column:
+                if options:
+                    selected_doctor_label = st.selectbox(
+                        "Doctor name *",
+                        options=options,
+                        index=0,
+                        help="Choose the saved doctor to filter candidates.",
+                    )
+                else:
+                    st.info("No doctors are saved yet. Run the extraction/import pipeline to populate the doctor master list.")
+                    selected_doctor_label = None
+            with medical_column:
+                selected_medical_class = st.selectbox(
+                    "Candidate class",
+                    options=["All", *candidate_classes],
+                )
+            with fit_column:
+                selected_fit_in_class = st.selectbox(
+                    "Fit in class",
+                    options=["All", *fit_in_class_options],
+                )
+            submitted = st.form_submit_button("Search candidates", type="primary", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.session_state.setdefault("doctor_search_candidate_ids", [])
+        st.session_state.setdefault("doctor_search_doctor_id", None)
+
+        if submitted:
+            st.session_state.doctor_search_candidate_ids = []
+            st.session_state.doctor_search_doctor_id = None
+            if not selected_doctor_label:
+                st.warning("No doctor is available in the saved master list.")
+            else:
+                doctor = doctor_by_label[selected_doctor_label]
+                with get_session() as session:
+                    candidates = get_candidates_by_doctor(
+                        session,
+                        doctor.id,
+                        medical_class=(
+                            selected_medical_class
+                            if selected_medical_class != "All"
+                            else None
+                        ),
+                        fit_in_class=(
+                            fit_in_class_options[selected_fit_in_class]
+                            if selected_fit_in_class != "All"
+                            else None
+                        ),
+                    )
+                st.session_state.doctor_search_candidate_ids = [
+                    candidate.id for candidate in candidates
+                ]
+                st.session_state.doctor_search_doctor_id = doctor.id
+
+        candidate_ids = st.session_state.doctor_search_candidate_ids
+        doctor_id = st.session_state.doctor_search_doctor_id
+        if doctor_id is not None:
+            with get_session() as session:
+                doctor = session.get(Doctor, doctor_id)
+                candidates = list(
+                    session.scalars(
+                        select(Candidate).where(Candidate.id.in_(candidate_ids))
+                    ).all()
+                ) if candidate_ids else []
+            candidates.sort(key=lambda candidate: candidate_ids.index(candidate.id))
+
+            if doctor:
+                st.markdown(
+                    f'<div class="result-banner"><strong>{doctor.full_name_english or doctor.doctor_name or "Unknown doctor"}</strong></div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown('<div class="detail-card"><h4>Doctor details</h4>', unsafe_allow_html=True)
+                kv("Doctor (English)", doctor.full_name_english or doctor.doctor_name)
+                kv("Total approved candidates", len(candidates), important=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                if candidates:
+                    st.markdown(
+                        f'<div class="record-heading"><h3>Approved candidates</h3>'
+                        f'<span class="record-count">{len(candidates)} record(s)</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.dataframe(
+                        [{
+                            "Candidate name": candidate.candidate_name or "Not available",
+                            "Father's name": candidate.father_name or "Not available",
+                            "Date of birth": candidate.date_of_birth,
+                            "Roll number": candidate.roll_number,
+                            "Recruitment CEN": candidate.recruitment_cen or "Not available",
+                        } for candidate in candidates],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                    for candidate in candidates:
+                        candidate_label = (
+                            f"{candidate.candidate_name or 'Unnamed candidate'} "
+                            f"({candidate.roll_number})"
+                        )
+                        candidate_url = (
+                            f"?candidate_id={candidate.id}&doctor_id={doctor.id}"
+                        )
+                        st.markdown(
+                            f'<a class="candidate-open-link" href="{candidate_url}" '
+                            f'target="_blank" rel="noopener noreferrer">'
+                            f"{escape(candidate_label)}</a>",
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.caption("No approved candidates match these filters.")
+
+                st.divider()
     else:
         st.markdown(
             '<div class="panel"><div class="section-kicker">Records</div>'
@@ -526,7 +810,11 @@ def main() -> None:
                         "Recruitment CEN": candidate.recruitment_cen,
                         "Medical examination date": examination.medical_examination_date if examination else None,
                         "DV date": examination.dv_date if examination else None,
-                        "Medical class": examination.medical_class if examination else None,
+                        "Candidate class": (
+                            examination.page_1.candidate_class
+                            if examination and examination.page_1
+                            else examination.medical_class if examination else None
+                        ),
                         "Candidate declaration date": examination.candidate_declaration_date if examination else None,
                         "Doctor": doctor.doctor_name if doctor else None,
                         "Fit in class": fitness.fit_in_class if fitness else None,

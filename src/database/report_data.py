@@ -18,8 +18,6 @@ class CandidateReportData:
     candidate_name: str | None = None
     father_name: str | None = None
     date_of_birth: date | None = None
-    mobile_number: str | None = None
-    email: str | None = None
     recruitment_cen: str | None = None
 
 
@@ -223,8 +221,6 @@ def build_report_data(
         candidate_name=candidate.candidate_name,
         father_name=candidate.father_name,
         date_of_birth=candidate.date_of_birth,
-        mobile_number=candidate.mobile_number,
-        email=candidate.email,
         recruitment_cen=candidate.recruitment_cen,
     )
 
@@ -240,7 +236,10 @@ def build_report_data(
         candidate_declaration_date=(
             examination.candidate_declaration_date
         ),
-        medical_class=examination.medical_class,
+        medical_class=(
+            examination.page_1.candidate_class
+            if examination.page_1 else examination.medical_class
+        ),
         identification_marks=(
             examination.identification_marks
         ),
@@ -454,8 +453,6 @@ def report_data_to_dict(
             "candidate_name": report.candidate.candidate_name,
             "father_name": report.candidate.father_name,
             "date_of_birth": report.candidate.date_of_birth,
-            "mobile_number": report.candidate.mobile_number,
-            "email": report.candidate.email,
             "recruitment_cen": report.candidate.recruitment_cen,
         },
         "examination": {

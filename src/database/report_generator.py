@@ -146,16 +146,6 @@ def render_page_1(report: PMEReportData) -> str:
                 )}
 
                 {table_row(
-                    "Mobile Number",
-                    candidate.mobile_number
-                )}
-
-                {table_row(
-                    "Email ID",
-                    candidate.email
-                )}
-
-                {table_row(
                     "Roll Number",
                     candidate.roll_number
                 )}

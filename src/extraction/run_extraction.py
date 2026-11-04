@@ -99,6 +99,11 @@ def main() -> int:
                      doc[:12])
             continue
         pages = df[df.document_id == doc].sort_values("page_index")
+        source_pdf_pages = {
+            int(row.page_index): int(row.source_page_number)
+            for row in pages.itertuples()
+            if hasattr(row, "source_page_number")
+        }
         schema_fields = extractor.schema.fields
         # person -> document mapping (acceptance: correct and logged)
         img_paths = [(_resolve(row, args.source)
@@ -116,7 +121,7 @@ def main() -> int:
                 fields, ok = extractor.extract_document(img_paths, long_edge)
             except Exception as e:    # noqa: BLE001 — never crash the batch
                 n_fail += 1
-                log.error("doc %s FAILED: %s", doc[:12], e)
+                log.error("doc %s FAILED (%s)", doc[:12], type(e).__name__)
                 continue
             if not ok:
                 n_fail += 1
@@ -127,10 +132,14 @@ def main() -> int:
             provenance = {path: {"page_index": leaf_page.get(path, 0),
                                  "model": extractor.model_id,
                                  "extracted_at": extracted_at,
+                                 "source_pdf_page_number": source_pdf_pages.get(leaf_page.get(path, 0)),
                                  "raw_value": val}
                           for path, val in leaves.items() if val is not None}
             record = ExtractionRecord(
                 document_id=doc, model=extractor.model_id, fields=fields,
+                source_pdf_sha256=str(pages.iloc[0].source_file_sha256),
+                source_pdf_pages=source_pdf_pages,
+                source_packet_index=person_index if person_index >= 0 else None,
                 provenance={k: ProvenanceEntry(**v)
                             for k, v in provenance.items()},
                 conflicts=[],
@@ -189,13 +198,17 @@ def main() -> int:
                     provenance[path] = {"page_index": idx,
                                         "model": extractor.model_id,
                                         "extracted_at": extracted_at,
+                                        "source_pdf_page_number": source_pdf_pages.get(idx),
                                         "raw_value": val}
             except Exception as e:        # noqa: BLE001 — never crash the batch
                 n_fail += 1
-                log.error("doc %s page %d FAILED: %s", doc[:12], idx, e)
+                log.error("doc %s page %d FAILED (%s)", doc[:12], idx, type(e).__name__)
 
         record = ExtractionRecord(
             document_id=doc, model=extractor.model_id,
+            source_pdf_sha256=str(pages.iloc[0].source_file_sha256),
+            source_pdf_pages=source_pdf_pages,
+            source_packet_index=person_index if person_index >= 0 else None,
             fields=unflatten_fields(leaves, schema_fields),
             provenance={k: ProvenanceEntry(**v) for k, v in provenance.items()},
             conflicts=conflicts, pages_covered=pages_covered)

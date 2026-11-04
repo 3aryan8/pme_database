@@ -57,6 +57,35 @@ fields:
             source_type: typed
             printed_row_label: "Med Exam Dt"
             extraction_hint: "The medical examination date, near the candidate name."
+          - field_name: post_name
+            data_type: string
+            source_type: typed
+            printed_row_label: "Post"
+            extraction_hint: "Transcribe the post name as printed; do not infer a class from the post."
+          - field_name: age_raw
+            data_type: string
+            source_type: typed
+            printed_row_label: "Age"
+            extraction_hint: "Preserve the printed age exactly; do not recalculate it from dates."
+          - field_name: memo_number
+            data_type: string
+            source_type: typed
+            printed_row_label: "Memo No."
+            extraction_hint: "Transcribe the memo number exactly."
+          - field_name: addressee_or_hospital
+            data_type: string
+            source_type: typed
+            extraction_hint: "Preserve the printed addressee or hospital wording exactly."
+          - field_name: station
+            data_type: string
+            source_type: typed
+            printed_row_label: "Station"
+            extraction_hint: "Transcribe the printed station if present."
+          - field_name: station_date
+            data_type: date
+            source_type: typed
+            printed_row_label: "Date"
+            extraction_hint: "Date printed with station/sign-off; not the DV or medical examination date."
 
       - field_name: narrative_details
         data_type: object
@@ -116,6 +145,11 @@ fields:
             source_type: handwritten
             printed_row_label: "ALB"
             extraction_hint: "Albumin, written on the ALB row; often scribbled shorthand — transcribe literally, null if unreadable."
+          - field_name: chest_xray_result
+            data_type: string
+            source_type: handwritten
+            printed_row_label: "MMR/F.S. CHEST X-RAY"
+            extraction_hint: "Preserve the handwritten result literally; do not expand MMR/F.S. unless independently verified."
 
       - field_name: right_side_table
         data_type: array
@@ -240,6 +274,12 @@ fields:
         source_type: handwritten
         extraction_hint: "The freehand examination block below the vision table (colour perception, night vision, urine, hearing, PR, BP, heart, lungs, etc.). Verbatim, lines joined with '; '; null if none legible."
 
+      - field_name: doctor_name
+        data_type: string
+        source_type: handwritten
+        printed_row_label: "MEDICAL EXAMINER / SIGNATURE / DR."
+        extraction_hint: "The full name of the Railway Medical Examiner appearing in the signature or stamp area at the bottom of the page. Include titles such as Dr./DMO/BRC if present. If the stamp is unreadable, null."
+
   # ===========================================================================
   # PAGE 4 — Sectional Tables (Declaration: Part-I and Part-II)
   # ===========================================================================
@@ -248,6 +288,33 @@ fields:
     page: 4
     extraction_hint: "Declaration by the candidate: a Particulars table plus PART-I and PART-II question tables. Each question row has a printed number and a handwritten answer."
     children:
+      - field_name: repeated_candidate_particulars
+        data_type: object
+        extraction_hint: "Candidate particulars repeated above the declaration table. These values belong to this examination snapshot, not the candidate master."
+        children:
+          - field_name: candidate_name
+            data_type: string
+            source_type: typed
+          - field_name: father_name
+            data_type: string
+            source_type: typed
+          - field_name: roll_number
+            data_type: string
+            source_type: typed
+          - field_name: date_of_birth
+            data_type: date
+            source_type: typed
+          - field_name: mobile_number
+            data_type: string
+            source_type: typed
+            extraction_hint: "Sensitive contact data. Store encrypted and never include in ordinary logs or views."
+          - field_name: email
+            data_type: string
+            source_type: typed
+            extraction_hint: "Sensitive contact data. Store encrypted and never include in ordinary logs or views."
+          - field_name: permanent_identification_marks
+            data_type: string
+            source_type: typed
       - field_name: part_one
         data_type: array
         printed_row_label: "PART-I"
@@ -294,3 +361,9 @@ fields:
               data_type: boolean
               source_type: handwritten
               extraction_hint: "The handwritten answer for this row: true if 'Yes', false if 'No', null if unreadable."
+
+      - field_name: doctor_name
+        data_type: string
+        source_type: handwritten
+        printed_row_label: "MEDICAL EXAMINER / SIGNATURE / DR."
+        extraction_hint: "The full name of the Railway Medical Examiner appearing in the signature or stamp area on this declaration page. Include titles such as Dr./DMO/BRC when legible. Prefer the explicit name over any generic stamp text."
