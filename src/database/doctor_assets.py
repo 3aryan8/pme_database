@@ -11,8 +11,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import MAIN_PROJECT_ROOT
-from .models import Candidate, Doctor, DoctorIdentification, MedicalExamination
+from .models import (
+    Candidate,
+    Doctor,
+    DoctorIdentification,
+    ExaminationAuthentication,
+    ExaminationDocument,
+    MedicalExamination,
+)
 from .report_images import find_report_images
+from .security import private_storage_root, read_private_asset, store_evidence
 
 
 def _encode_crop(image: Image.Image, label: str) -> bytes:
@@ -106,6 +114,111 @@ def _region_crops(
     )
 
 
+def save_examination_visual_evidence(
+    session: Session,
+    examination_id: int,
+    document_id: str,
+    source_pdf_pages: dict[int, int] | None = None,
+    region_root: Path | None = None,
+) -> list[ExaminationAuthentication]:
+    """Encrypt and link all detected visual assets to their examination/page."""
+    region_directory = region_root or MAIN_PROJECT_ROOT / "data/processed/regions"
+    try:
+        report_pages = dict(find_report_images(document_id))
+    except FileNotFoundError:
+        return []
+
+    auth_assets: dict[int, dict[str, int]] = {}
+    processed_pages: set[int] = set()
+    asset_types = {
+        "photo": "CANDIDATE_PHOTO",
+        "thumbprint": "CANDIDATE_THUMBPRINT",
+        "signature": "SIGNATURE",
+        "stamp_seal": "STAMP_SEAL",
+    }
+    for region_path in sorted(region_directory.joinpath(document_id).glob("page_*.json")):
+        try:
+            payload = json.loads(region_path.read_text(encoding="utf-8"))
+            page_index = int(payload["page_index"])
+            form_page = page_index + 1
+            image_path = report_pages[form_page]
+        except (KeyError, TypeError, ValueError, OSError):
+            continue
+        if form_page not in range(1, 5):
+            continue
+        processed_pages.add(form_page)
+
+        try:
+            with Image.open(image_path) as source:
+                source_image = source.convert("RGB")
+                for detection in payload.get("detections", []):
+                    region_class = str(detection.get("region_class", "")).lower()
+                    asset_type = asset_types.get(region_class)
+                    box = detection.get("box_norm")
+                    if asset_type is None or not isinstance(box, list) or len(box) != 4:
+                        continue
+                    width, height = source_image.size
+                    left, top, right, bottom = (
+                        max(0, min(1, float(box[0]))) * width,
+                        max(0, min(1, float(box[1]))) * height,
+                        max(0, min(1, float(box[2]))) * width,
+                        max(0, min(1, float(box[3]))) * height,
+                    )
+                    crop = source_image.crop((left, top, right, bottom))
+                    if crop.width < 8 or crop.height < 8:
+                        continue
+                    buffer = BytesIO()
+                    crop.save(buffer, format="PNG")
+                    evidence = store_evidence(
+                        session,
+                        examination_id=examination_id,
+                        content=buffer.getvalue(),
+                        asset_type=asset_type,
+                        form_page_number=form_page,
+                        source_pdf_page_number=(source_pdf_pages or {}).get(page_index),
+                        media_type="image/png",
+                    )
+                    if asset_type == "SIGNATURE":
+                        auth_assets.setdefault(form_page, {})["signature"] = evidence.id
+                    elif asset_type == "STAMP_SEAL":
+                        auth_assets.setdefault(form_page, {})["stamp"] = evidence.id
+        except (OSError, ValueError):
+            continue
+
+    records: list[ExaminationAuthentication] = []
+    for page_number in range(1, 5):
+        assets = auth_assets.get(page_number, {})
+        record = session.scalar(
+            select(ExaminationAuthentication).where(
+                ExaminationAuthentication.examination_id == examination_id,
+                ExaminationAuthentication.page_number == page_number,
+            )
+        )
+        if record is None:
+            record = ExaminationAuthentication(
+                examination_id=examination_id,
+                page_number=page_number,
+                actor_role="UNKNOWN",
+            )
+            session.add(record)
+        record.source_pdf_page_number = (source_pdf_pages or {}).get(page_number - 1)
+        record.signature_status = (
+            "UNVERIFIED" if "signature" in assets
+            else "MISSING" if page_number in processed_pages
+            else "UNVERIFIED"
+        )
+        record.stamp_status = (
+            "UNVERIFIED" if "stamp" in assets
+            else "MISSING" if page_number in processed_pages
+            else "UNVERIFIED"
+        )
+        record.signature_document_id = assets.get("signature")
+        record.stamp_document_id = assets.get("stamp")
+        records.append(record)
+    session.flush()
+    return records
+
+
 def save_detected_doctor_assets(
     session: Session,
     doctor: Doctor,
@@ -113,69 +226,41 @@ def save_detected_doctor_assets(
     document_id: str,
     region_root: Path | None = None,
 ) -> bool:
-    """Persist candidate evidence and seed the doctor's canonical references."""
-    signature_crop, stamp_crop, source_page = _region_crops(document_id, region_root)
-    if source_page is None or (signature_crop is None and stamp_crop is None):
-        return False
-
-    directory = MAIN_PROJECT_ROOT / "data/processed/doctor_assets" / str(doctor.id)
-    candidate_directory = directory / "candidates" / str(candidate.id)
-    directory.mkdir(parents=True, exist_ok=True)
-    candidate_directory.mkdir(parents=True, exist_ok=True)
-    existing = session.scalar(
-        select(DoctorIdentification)
+    """Persist detected crops as encrypted examination evidence."""
+    examination_id = session.scalar(
+        select(MedicalExamination.id)
         .where(
-            DoctorIdentification.candidate_id == candidate.id,
-            DoctorIdentification.doctor_id == doctor.id,
-            DoctorIdentification.identification_method == "detected_reference_crop",
+            MedicalExamination.candidate_id == candidate.id,
+            MedicalExamination.examining_doctor_id == doctor.id,
+        )
+        .order_by(MedicalExamination.id.desc())
+        .limit(1)
+    )
+    if examination_id is None:
+        return False
+    before = session.scalar(
+        select(ExaminationDocument.id)
+        .where(
+            ExaminationDocument.examination_id == examination_id,
+            ExaminationDocument.asset_type.in_(("SIGNATURE", "STAMP_SEAL")),
         )
         .limit(1)
     )
-    saved = False
-    evidence_paths: dict[str, str | None] = {
-        "signature": existing.signature_image_path if existing else None,
-        "stamp": existing.stamp_image_path if existing else None,
-    }
-    for label, crop, field in (
-        ("signature", signature_crop, "signature_image_path"),
-        ("stamp", stamp_crop, "stamp_image_path"),
-    ):
-        if crop is None or evidence_paths[label]:
-            continue
-        image_bytes = _encode_crop(crop, label)
-        evidence_path = candidate_directory / f"{label}.png"
-        evidence_path.write_bytes(image_bytes)
-        evidence_paths[label] = _stored_path(evidence_path)
-        if not getattr(doctor, field):
-            canonical_path = directory / f"{label}.png"
-            canonical_path.write_bytes(image_bytes)
-            setattr(doctor, field, _stored_path(canonical_path))
-            setattr(doctor, f"{label}_hash", sha256(image_bytes).hexdigest())
-        saved = True
-
-    if existing is not None:
-        if not saved:
-            return False
-        existing.signature_image_path = evidence_paths["signature"]
-        existing.stamp_image_path = evidence_paths["stamp"]
-        existing.signature_detected = existing.signature_detected or signature_crop is not None
-        existing.stamp_detected = existing.stamp_detected or stamp_crop is not None
-    elif saved:
-        session.add(
-            DoctorIdentification(
-                candidate_id=candidate.id,
-                doctor_id=doctor.id,
-                source_page=source_page,
-                identification_method="detected_reference_crop",
-                stamp_detected=stamp_crop is not None,
-                signature_detected=signature_crop is not None,
-                signature_image_path=evidence_paths["signature"],
-                stamp_image_path=evidence_paths["stamp"],
-                review_status="detected",
-            )
+    save_examination_visual_evidence(
+        session,
+        examination_id,
+        document_id,
+        region_root=region_root,
+    )
+    after = session.scalar(
+        select(ExaminationDocument.id)
+        .where(
+            ExaminationDocument.examination_id == examination_id,
+            ExaminationDocument.asset_type.in_(("SIGNATURE", "STAMP_SEAL")),
         )
-        session.flush()
-    return saved
+        .limit(1)
+    )
+    return before is None and after is not None
 
 
 def identify_doctor_from_document(
@@ -191,15 +276,25 @@ def identify_doctor_from_document(
     best_doctor: Doctor | None = None
     best_score = 0.0
     for doctor in session.scalars(select(Doctor)).all():
-        signature_path = _asset_path(doctor.signature_image_path)
-        stamp_path = _asset_path(doctor.stamp_image_path)
         scores: list[float] = []
-        if signature_crop is not None and signature_path and signature_path.is_file():
-            with Image.open(signature_path) as stored_signature:
-                scores.append(_image_similarity(signature_crop, stored_signature))
-        if stamp_crop is not None and stamp_path and stamp_path.is_file():
-            with Image.open(stamp_path) as stored_stamp:
-                scores.append(_image_similarity(stamp_crop, stored_stamp))
+        if signature_crop is not None and doctor.signature_image_path:
+            try:
+                reference = _load_doctor_reference(session, doctor.signature_image_path)
+            except (FileNotFoundError, OSError, RuntimeError):
+                reference = None
+            if reference is not None:
+                with reference:
+                    stored_signature = reference
+                    scores.append(_image_similarity(signature_crop, stored_signature))
+        if stamp_crop is not None and doctor.stamp_image_path:
+            try:
+                reference = _load_doctor_reference(session, doctor.stamp_image_path)
+            except (FileNotFoundError, OSError, RuntimeError):
+                reference = None
+            if reference is not None:
+                with reference:
+                    stored_stamp = reference
+                    scores.append(_image_similarity(stamp_crop, stored_stamp))
         if scores:
             score = sum(scores) / len(scores)
             if score > best_score:
@@ -208,6 +303,24 @@ def identify_doctor_from_document(
     if best_score < 0.78:
         return None, best_score
     return best_doctor, best_score
+
+
+def _load_doctor_reference(session: Session, value: str) -> Image.Image | None:
+    if value.startswith("examinations/"):
+        content = read_private_asset(
+            session,
+            value,
+            actor="system:doctor_matcher",
+            authorize=lambda actor, _exam_id, asset_type: (
+                actor == "system:doctor_matcher"
+                and asset_type in {"SIGNATURE", "STAMP_SEAL"}
+            ),
+        )
+        return Image.open(BytesIO(content)).convert("RGB") if content else None
+    path = _asset_path(value)
+    if path is None or not path.is_file():
+        return None
+    return Image.open(path).convert("RGB")
 
 
 def save_doctor_reference_assets(
@@ -219,7 +332,7 @@ def save_doctor_reference_assets(
     stamp_crop: Image.Image,
     asset_root: Path | None = None,
 ) -> tuple[Path, Path]:
-    """Save one manually reviewed signature/stamp pair for a doctor."""
+    """Save a manually reviewed signature/stamp pair as encrypted exam evidence."""
     if source_page not in {3, 4}:
         raise ValueError("Doctor references must come from report page 3 or 4.")
 
@@ -229,7 +342,7 @@ def save_doctor_reference_assets(
         raise ValueError("The selected doctor or candidate no longer exists.")
 
     linked_exam = session.scalar(
-        select(MedicalExamination.id)
+        select(MedicalExamination)
         .where(
             MedicalExamination.candidate_id == candidate_id,
             MedicalExamination.examining_doctor_id == doctor_id,
@@ -238,6 +351,8 @@ def save_doctor_reference_assets(
     )
     if candidate.doctor_id != doctor_id and linked_exam is None:
         raise ValueError("The selected candidate is not linked to this doctor.")
+    if linked_exam is None:
+        raise ValueError("Doctor references must be linked to a medical examination.")
 
     if any(
         (
@@ -251,42 +366,58 @@ def save_doctor_reference_assets(
 
     signature_bytes = _encode_crop(signature_crop, "signature")
     stamp_bytes = _encode_crop(stamp_crop, "stamp")
-    directory = (asset_root or MAIN_PROJECT_ROOT / "data/processed/doctor_assets") / str(doctor_id)
-    signature_path = directory / "signature.png"
-    stamp_path = directory / "stamp.png"
-    if signature_path.exists() or stamp_path.exists():
-        raise ValueError("Reference image files already exist for this doctor.")
-
-    directory.mkdir(parents=True, exist_ok=True)
-    signature_tmp = directory / ".signature.png.tmp"
-    stamp_tmp = directory / ".stamp.png.tmp"
-    try:
-        signature_tmp.write_bytes(signature_bytes)
-        stamp_tmp.write_bytes(stamp_bytes)
-        signature_tmp.replace(signature_path)
-        stamp_tmp.replace(stamp_path)
-
-        doctor.signature_image_path = _stored_path(signature_path)
-        doctor.stamp_image_path = _stored_path(stamp_path)
-        doctor.signature_hash = sha256(signature_bytes).hexdigest()
-        doctor.stamp_hash = sha256(stamp_bytes).hexdigest()
-        session.add(
-            DoctorIdentification(
-                candidate_id=candidate_id,
-                doctor_id=doctor_id,
-                source_page=source_page,
-                identification_method="manual_reference_crop",
-                stamp_detected=True,
-                signature_detected=True,
-                review_status="reviewed",
-            )
+    signature = store_evidence(
+        session,
+        examination_id=linked_exam.id,
+        content=signature_bytes,
+        asset_type="SIGNATURE",
+        form_page_number=source_page,
+        source_pdf_page_number=None,
+        media_type="image/png",
+        storage_root=asset_root,
+    )
+    stamp = store_evidence(
+        session,
+        examination_id=linked_exam.id,
+        content=stamp_bytes,
+        asset_type="STAMP_SEAL",
+        form_page_number=source_page,
+        source_pdf_page_number=None,
+        media_type="image/png",
+        storage_root=asset_root,
+    )
+    doctor.signature_image_path = signature.storage_key
+    doctor.stamp_image_path = stamp.storage_key
+    doctor.signature_hash = signature.sha256
+    doctor.stamp_hash = stamp.sha256
+    authentication = session.scalar(
+        select(ExaminationAuthentication).where(
+            ExaminationAuthentication.examination_id == linked_exam.id,
+            ExaminationAuthentication.page_number == source_page,
         )
-        session.flush()
-    except Exception:
-        signature_tmp.unlink(missing_ok=True)
-        stamp_tmp.unlink(missing_ok=True)
-        signature_path.unlink(missing_ok=True)
-        stamp_path.unlink(missing_ok=True)
-        raise
-
-    return signature_path, stamp_path
+    )
+    if authentication is None:
+        authentication = ExaminationAuthentication(
+            examination_id=linked_exam.id,
+            page_number=source_page,
+            actor_role="MEDICAL_EXAMINER",
+        )
+        session.add(authentication)
+    authentication.doctor_id = doctor_id
+    authentication.signature_status = "VERIFIED"
+    authentication.stamp_status = "VERIFIED"
+    authentication.signature_document_id = signature.id
+    authentication.stamp_document_id = stamp.id
+    identification = DoctorIdentification(
+        candidate_id=candidate_id,
+        doctor_id=doctor_id,
+        source_page=source_page,
+        identification_method="manual_reference_crop",
+        stamp_detected=True,
+        signature_detected=True,
+        review_status="reviewed",
+    )
+    session.add(identification)
+    session.flush()
+    root = asset_root or private_storage_root()
+    return root / signature.storage_key, root / stamp.storage_key

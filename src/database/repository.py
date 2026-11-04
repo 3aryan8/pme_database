@@ -12,6 +12,8 @@ from .models import (
     Candidate,
     Declaration,
     Doctor,
+    ExaminationDocument,
+    ExaminationPage1,
     ExtractionRun,
     FitnessClassification,
     MedicalExamination,
@@ -20,6 +22,7 @@ from .models import (
     PmeCaseMeasurement,
     PmeVisionRow,
     ReportImage,
+    SourceDocument,
     VisionExamination,
 )
 from .doctor_utils import normalize_doctor_name
@@ -177,10 +180,77 @@ def get_examination_by_id(
             selectinload(
                 MedicalExamination.extraction_runs
             ),
+            selectinload(MedicalExamination.page_statuses),
+            selectinload(MedicalExamination.page_1),
+            selectinload(MedicalExamination.page_4),
+            selectinload(MedicalExamination.authentication_records),
+            selectinload(MedicalExamination.examination_documents).selectinload(
+                ExaminationDocument.source_document
+            ).selectinload(SourceDocument.pages),
+            selectinload(MedicalExamination.extracted_field_values),
+            selectinload(MedicalExamination.status_events),
         )
     )
 
     return session.scalar(statement)
+
+
+def search_examinations(
+    session: Session,
+    *,
+    candidate_id: int | None = None,
+    candidate_name: str | None = None,
+    roll_number: str | None = None,
+    medical_examination_date=None,
+    candidate_class: str | None = None,
+    fit_in_class: str | None = None,
+    unfit_in_class: str | None = None,
+    overall_status: str | None = None,
+) -> list[MedicalExamination]:
+    """Search examination history and return complete records in one operation."""
+    statement = (
+        select(MedicalExamination)
+        .join(MedicalExamination.candidate)
+        .outerjoin(ExaminationPage1, ExaminationPage1.examination_id == MedicalExamination.id)
+        .outerjoin(FitnessClassification, FitnessClassification.examination_id == MedicalExamination.id)
+    )
+    if candidate_id is not None:
+        statement = statement.where(MedicalExamination.candidate_id == candidate_id)
+    if candidate_name:
+        statement = statement.where(Candidate.candidate_name.ilike(f"%{candidate_name.strip()}%"))
+    if roll_number:
+        statement = statement.where(Candidate.roll_number == roll_number.strip())
+    if medical_examination_date is not None:
+        statement = statement.where(
+            MedicalExamination.medical_examination_date == medical_examination_date
+        )
+    if candidate_class:
+        statement = statement.where(ExaminationPage1.candidate_class == candidate_class)
+    if fit_in_class:
+        statement = statement.where(FitnessClassification.fit_in_class == fit_in_class)
+    if unfit_in_class:
+        statement = statement.where(FitnessClassification.unfit_in_class == unfit_in_class)
+    if overall_status:
+        statement = statement.where(MedicalExamination.overall_status == overall_status)
+    statement = statement.order_by(
+        MedicalExamination.medical_examination_date.desc().nullslast(),
+        MedicalExamination.id.desc(),
+    ).options(
+        selectinload(MedicalExamination.candidate),
+        selectinload(MedicalExamination.page_1),
+        selectinload(MedicalExamination.page_4),
+        selectinload(MedicalExamination.pme_case).selectinload(PmeCase.vision_rows),
+        selectinload(MedicalExamination.pme_case).selectinload(PmeCase.measurements),
+        selectinload(MedicalExamination.vision),
+        selectinload(MedicalExamination.physical),
+        selectinload(MedicalExamination.fitness),
+        selectinload(MedicalExamination.declarations),
+        selectinload(MedicalExamination.page_statuses),
+        selectinload(MedicalExamination.authentication_records),
+        selectinload(MedicalExamination.examination_documents),
+        selectinload(MedicalExamination.extracted_field_values),
+    )
+    return list(session.scalars(statement).unique().all())
 
 
 def get_latest_examination_for_candidate(
@@ -526,7 +596,18 @@ def get_candidates_by_doctor(
             )
         )
         if medical_class is not None:
-            statement = statement.where(MedicalExamination.medical_class == medical_class)
+            statement = statement.outerjoin(
+                ExaminationPage1,
+                ExaminationPage1.examination_id == MedicalExamination.id,
+            ).where(
+                or_(
+                    ExaminationPage1.candidate_class == medical_class,
+                    (
+                        ExaminationPage1.examination_id.is_(None)
+                        & (MedicalExamination.medical_class == medical_class)
+                    ),
+                )
+            )
         if fit_in_class is not None:
             statement = statement.join(MedicalExamination.fitness).where(
                 (

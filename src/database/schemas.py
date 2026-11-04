@@ -24,6 +24,12 @@ class Provenance(BaseModel):
     model: str | None = None
     extracted_at: datetime | None = None
     raw_value: Any = None
+    normalized_value: Any = None
+    source_pdf_page_number: int | None = Field(default=None, ge=1)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    validation_status: str | None = None
+    human_verification_status: str | None = None
+    bounding_box: list[float] | None = None
 
 
 # ============================================================
@@ -100,6 +106,17 @@ class NarrativeDetails(BaseModel):
         default=None,
         alias="class",
     )
+    post_name: str | None = None
+    age_raw: str | None = None
+    memo_number: str | None = None
+    addressee_or_hospital: str | None = None
+    station: str | None = None
+    station_date: date | None = None
+
+    @field_validator("station_date", mode="before")
+    @classmethod
+    def parse_station_date(cls, value: Any) -> date | None:
+        return GeneralDetails.parse_date(value)
 
 
 class PhysicalTraits(BaseModel):
@@ -144,6 +161,8 @@ class PmeCase(BaseModel):
     urine: str | None = None
     sugar: str | None = None
     alb: str | None = None
+    chest_xray_result: str | None = None
+    advice: str | None = None
 
 
 class PmeCaseMeasurement(BaseModel):
@@ -306,6 +325,23 @@ class Declaration(BaseModel):
     answer: str | None = None
 
 
+class RepeatedCandidateParticulars(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    candidate_name: str | None = None
+    father_name: str | None = None
+    roll_number: str | None = None
+    date_of_birth: date | None = None
+    mobile_number: str | None = None
+    email: str | None = None
+    permanent_identification_marks: str | None = None
+
+    @field_validator("date_of_birth", mode="before")
+    @classmethod
+    def parse_repeated_dob(cls, value: Any) -> date | None:
+        return GeneralDetails.parse_date(value)
+
+
 class Page4(BaseModel):
     """
     Structured representation of Page 4.
@@ -350,6 +386,16 @@ class Page4(BaseModel):
     # --------------------------------------------------------
 
     declaration_date: date | None = None
+    repeated_candidate_particulars: RepeatedCandidateParticulars = Field(
+        default_factory=RepeatedCandidateParticulars
+    )
+    candidate_name: str | None = None
+    father_name: str | None = None
+    roll_number: str | None = None
+    date_of_birth: date | None = None
+    mobile_number: str | None = None
+    email: str | None = None
+    permanent_identification_marks: str | None = None
 
     doctor_name: str | None = None
 
@@ -391,6 +437,11 @@ class Page4(BaseModel):
             f"Unsupported declaration date: {value!r}"
         )
 
+    @field_validator("date_of_birth", mode="before")
+    @classmethod
+    def parse_page4_date_of_birth(cls, value: Any) -> date | None:
+        return GeneralDetails.parse_date(value)
+
 
 # ============================================================
 # Complete PME Extraction
@@ -411,6 +462,11 @@ class PMEExtraction(BaseModel):
     # --------------------------------------------------------
 
     document_id: str
+
+    source_pdf_sha256: str | None = None
+    source_pdf_pages: dict[int, int] = Field(default_factory=dict)
+    source_packet_index: int | None = Field(default=None, ge=0)
+    source_document_id: int | None = None
 
     model: str | None = None
 

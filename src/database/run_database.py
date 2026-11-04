@@ -37,8 +37,8 @@ def main() -> int:
         except Exception as error:
             invalid.append((path, error))
     if invalid:
-        for path, error in invalid:
-            print(f"[ERROR] {path}: {error}")
+        for _path, error in invalid:
+            print(f"[ERROR] extraction record failed validation ({type(error).__name__})")
         return 1
 
     init_db()

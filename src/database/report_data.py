@@ -236,7 +236,10 @@ def build_report_data(
         candidate_declaration_date=(
             examination.candidate_declaration_date
         ),
-        medical_class=examination.medical_class,
+        medical_class=(
+            examination.page_1.candidate_class
+            if examination.page_1 else examination.medical_class
+        ),
         identification_marks=(
             examination.identification_marks
         ),

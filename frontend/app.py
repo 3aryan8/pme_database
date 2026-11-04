@@ -24,6 +24,7 @@ from src.database.importer import sync_extractions
 from src.database.models import (
     Candidate,
     Doctor,
+    ExaminationPage1,
     FitnessClassification,
     MedicalExamination,
 )
@@ -340,7 +341,12 @@ def show_candidate(candidate: Candidate) -> None:
             st.markdown('<div class="detail-card"><h4>Medical examination</h4>', unsafe_allow_html=True)
             kv("DV date", examination.dv_date)
             kv("Medical examination date", examination.medical_examination_date)
-            kv("Medical class", examination.medical_class, important=True)
+            kv(
+                "Candidate class",
+                examination.page_1.candidate_class
+                if examination.page_1 else examination.medical_class,
+                important=True,
+            )
             kv("Identification marks", examination.identification_marks)
             kv("Declaration date", examination.candidate_declaration_date)
             doctor = examination.examining_doctor
@@ -610,11 +616,11 @@ def main() -> None:
         )
         with get_session() as session:
             doctors = get_doctor_directory(session)
-            medical_classes = session.scalars(
-                select(MedicalExamination.medical_class)
-                .where(MedicalExamination.medical_class.is_not(None))
+            candidate_classes = session.scalars(
+                select(ExaminationPage1.candidate_class)
+                .where(ExaminationPage1.candidate_class.is_not(None))
                 .distinct()
-                .order_by(MedicalExamination.medical_class)
+                .order_by(ExaminationPage1.candidate_class)
             ).all()
             fit_in_class_values = session.scalars(
                 select(FitnessClassification.fit_in_class)
@@ -622,7 +628,7 @@ def main() -> None:
                 .distinct()
                 .order_by(FitnessClassification.fit_in_class)
             ).all()
-        medical_classes = [value for value in medical_classes if value.strip()]
+        candidate_classes = [value for value in candidate_classes if value.strip()]
         fit_in_class_options = _fit_class_options(fit_in_class_values)
 
         doctor_by_label = {}
@@ -646,8 +652,8 @@ def main() -> None:
                     selected_doctor_label = None
             with medical_column:
                 selected_medical_class = st.selectbox(
-                    "Medical class",
-                    options=["All", *medical_classes],
+                    "Candidate class",
+                    options=["All", *candidate_classes],
                 )
             with fit_column:
                 selected_fit_in_class = st.selectbox(
@@ -804,7 +810,11 @@ def main() -> None:
                         "Recruitment CEN": candidate.recruitment_cen,
                         "Medical examination date": examination.medical_examination_date if examination else None,
                         "DV date": examination.dv_date if examination else None,
-                        "Medical class": examination.medical_class if examination else None,
+                        "Candidate class": (
+                            examination.page_1.candidate_class
+                            if examination and examination.page_1
+                            else examination.medical_class if examination else None
+                        ),
                         "Candidate declaration date": examination.candidate_declaration_date if examination else None,
                         "Doctor": doctor.doctor_name if doctor else None,
                         "Fit in class": fitness.fit_in_class if fitness else None,

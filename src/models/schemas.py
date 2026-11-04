@@ -127,6 +127,12 @@ class ProvenanceEntry(BaseModel):
     model: str
     extracted_at: str
     raw_value: str = ""
+    normalized_value: Any = None
+    source_pdf_page_number: Optional[int] = Field(default=None, ge=1)
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    validation_status: Optional[str] = None
+    human_verification_status: Optional[str] = None
+    bounding_box: Optional[List[float]] = None
 
 
 class ExtractionRecord(BaseModel):
@@ -136,6 +142,9 @@ class ExtractionRecord(BaseModel):
     document_id: str
     model: str
     fields: Dict[str, Any]
+    source_pdf_sha256: Optional[str] = None
+    source_pdf_pages: Dict[int, int] = Field(default_factory=dict)
+    source_packet_index: Optional[int] = Field(default=None, ge=0)
     provenance: Dict[str, ProvenanceEntry] = Field(default_factory=dict)
     conflicts: List[str] = Field(default_factory=list)  # fields with >1 value across pages
     pages_covered: List[int] = Field(default_factory=list)

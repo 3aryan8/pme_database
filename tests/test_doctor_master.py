@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 from PIL import Image
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -17,6 +18,8 @@ from src.database.models import (
     Candidate,
     Doctor,
     DoctorIdentification,
+    ExaminationAuthentication,
+    ExaminationDocument,
     FitnessClassification,
     MedicalExamination,
 )
@@ -75,7 +78,11 @@ def test_merge_doctor_aliases_preserves_candidate_and_examination_links() -> Non
         assert identification.doctor_id == canonical.id
 
 
-def test_save_doctor_reference_assets_stores_once_with_review_record(tmp_path: Path) -> None:
+def test_save_doctor_reference_assets_stores_once_with_review_record(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("PME_DOCUMENT_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("PME_PRIVATE_DOCUMENT_ROOT", str(tmp_path))
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
@@ -88,6 +95,12 @@ def test_save_doctor_reference_assets_stores_once_with_review_record(tmp_path: P
             doctor_id=doctor.id,
         )
         session.add(candidate)
+        session.flush()
+        examination = MedicalExamination(
+            candidate_id=candidate.id,
+            examining_doctor_id=doctor.id,
+        )
+        session.add(examination)
         session.commit()
 
         signature = Image.new("RGB", (80, 28), "white")
@@ -106,8 +119,9 @@ def test_save_doctor_reference_assets_stores_once_with_review_record(tmp_path: P
         session.refresh(doctor)
         assert signature_path.is_file()
         assert stamp_path.is_file()
-        assert doctor.signature_image_path == str(signature_path)
-        assert doctor.stamp_image_path == str(stamp_path)
+        assert signature_path.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n"
+        assert doctor.signature_image_path.startswith("examinations/")
+        assert doctor.stamp_image_path.startswith("examinations/")
         assert doctor.signature_hash
         assert doctor.stamp_hash
         identification = session.scalar(select(DoctorIdentification))
@@ -116,6 +130,11 @@ def test_save_doctor_reference_assets_stores_once_with_review_record(tmp_path: P
         assert identification.doctor_id == doctor.id
         assert identification.source_page == 3
         assert identification.review_status == "reviewed"
+        assets = list(session.scalars(select(ExaminationDocument)).all())
+        assert {asset.asset_type for asset in assets} == {"SIGNATURE", "STAMP_SEAL"}
+        authentication = session.scalar(select(ExaminationAuthentication))
+        assert authentication.signature_status == "VERIFIED"
+        assert authentication.stamp_status == "VERIFIED"
 
         with pytest.raises(ValueError, match="already has a saved reference pair"):
             save_doctor_reference_assets(

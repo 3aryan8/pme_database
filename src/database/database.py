@@ -1,5 +1,5 @@
 # Phase: database connection | Input: configured database URL | Output: SQLAlchemy engine and sessions | Command: ``uv run python -m src.database.run_database --help``.
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from .config import get_database_url
@@ -7,6 +7,7 @@ from .models import Base
 
 
 DATABASE_URL = get_database_url()
+SCHEMA_REVISION = "20261104_01"
 
 connect_args = (
     {"check_same_thread": False}
@@ -20,6 +21,11 @@ engine = create_engine(
     pool_pre_ping=True,
     connect_args=connect_args,
 )
+
+if DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
 SessionLocal = sessionmaker(
     bind=engine,
@@ -37,8 +43,11 @@ def _ensure_sqlite_doctor_columns(target_engine=None) -> None:
     with target.begin() as connection:
         inspector = inspect(connection)
         if not inspector.has_table("doctors"):
-            Base.metadata.create_all(target)
-            return
+            raise RuntimeError(
+                "The existing SQLite database is missing its doctors table; "
+                "refusing implicit schema creation. Restore a backup or review "
+                "the database before migration."
+            )
 
         if inspector.has_table("candidates"):
             candidate_columns = {column["name"] for column in inspector.get_columns("candidates")}
@@ -54,12 +63,6 @@ def _ensure_sqlite_doctor_columns(target_engine=None) -> None:
                         "WHERE doctor_id IS NULL"
                     )
                 )
-            for column_name in ("mobile_number", "email"):
-                if column_name in candidate_columns:
-                    connection.execute(
-                        text(f"ALTER TABLE candidates DROP COLUMN {column_name}")
-                    )
-
         doctor_columns = {column["name"] for column in inspector.get_columns("doctors")}
         for column_name, column_sql in {
             "full_name_hindi": "VARCHAR(200)",
@@ -104,7 +107,33 @@ def _ensure_sqlite_doctor_columns(target_engine=None) -> None:
 
 def init_db(target_engine=None):
     target = target_engine or engine
-    Base.metadata.create_all(target)
+    inspector = inspect(target)
+    tables = set(inspector.get_table_names())
+    if not tables:
+        Base.metadata.create_all(target)
+        with target.begin() as connection:
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)")
+            )
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                {"revision": SCHEMA_REVISION},
+            )
+    else:
+        if "alembic_version" not in tables:
+            raise RuntimeError(
+                "This existing database has not been migrated. Review the "
+                "timestamped backup, then run `alembic upgrade head` explicitly."
+            )
+        with target.connect() as connection:
+            revision = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one_or_none()
+        if revision != SCHEMA_REVISION:
+            raise RuntimeError(
+                f"Database schema revision is {revision!r}; expected "
+                f"{SCHEMA_REVISION!r}. Run `alembic upgrade head` explicitly."
+            )
     _ensure_sqlite_doctor_columns(target)
 
 

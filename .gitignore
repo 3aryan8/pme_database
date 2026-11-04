@@ -62,3 +62,4 @@ htmlcov/
 docker/*.log
 
 .db
+data/pme.backup-*.db

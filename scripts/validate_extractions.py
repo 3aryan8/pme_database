@@ -24,13 +24,10 @@ def main() -> int:
     for file_path in files:
         try:
             extraction = PMEExtraction.from_file(file_path)
-            print(
-                f"[OK] {file_path.name} | {extraction.document_id} | "
-                f"roll={extraction.page1.narrative_details.roll_number}"
-            )
+            print("[OK] extraction record validated")
         except Exception as error:
             bad += 1
-            print(f"[ERROR] {file_path.name}: {error}")
+            print(f"[ERROR] extraction record failed validation ({type(error).__name__})")
 
     print(f"Valid: {len(files) - bad}\nInvalid: {bad}")
     return 1 if bad else 0

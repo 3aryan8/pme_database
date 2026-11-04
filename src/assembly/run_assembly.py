@@ -4,6 +4,7 @@
 Usage: uv run python -m src.assembly.run_assembly
 """
 import json
+import argparse
 from datetime import datetime, timezone
 
 import pymupdf as fitz
@@ -18,11 +19,11 @@ from src.utils.logger import setup_logger
 log = setup_logger("assembly")
 
 
-def main(source_path=None) -> int:
+def main(source_path=None, split_config_path=None) -> int:
     """Run assembly. `source_path` overrides the splits.yaml source PDF
     (e.g. the merged PDF from the merge step); default keeps old behavior."""
     config.bootstrap_dirs()
-    split_map = load_split_map(source_path)
+    split_map = load_split_map(source_path, split_config_path)
     if not split_map.confirmed:
         log.error("configs/splits.yaml has confirmed: false — assembly refuses "
                   "to run on unverified person boundaries. Inspect the PDF and "
@@ -68,6 +69,7 @@ def main(source_path=None) -> int:
         "source_file_sha256": split_map.source_sha,
         "source_file": split_map.source_path.name,
         "persons": [[f, l] for _, f, l in split_map.persons],
+        "supplemental_documents": split_map.supplemental_documents,
         "rendering": "adaptive — page dpi = min(source effective dpi, cap)",
         "render_dpi_cap": config.pipeline.rendering.render_dpi,
         "applied_at": datetime.now(timezone.utc).isoformat(),
@@ -78,4 +80,8 @@ def main(source_path=None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description="Split and render candidate examination packets")
+    parser.add_argument("--source", type=str, default=None)
+    parser.add_argument("--split-config", type=str, default=None)
+    args = parser.parse_args()
+    raise SystemExit(main(args.source, args.split_config))
